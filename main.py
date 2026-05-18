@@ -9,6 +9,9 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
+# ===================== DEBUG START =====================
+print(">>> Starting main.py")
+
 # ===================== TIMEZONE =====================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
@@ -21,6 +24,7 @@ def home():
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
+    print(f">>> Flask starting on port {port}")
     flask_app.run(host="0.0.0.0", port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
@@ -29,6 +33,9 @@ threading.Thread(target=run_web, daemon=True).start()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 API_KEY = os.getenv("ALERTS_API_KEY", "")
+
+print(">>> BOT_TOKEN:", BOT_TOKEN)
+print(">>> CHANNEL_ID:", CHANNEL_ID)
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is missing")
@@ -55,20 +62,13 @@ def now():
 # ===================== LIVE TIMER =====================
 async def live_timer(application):
     global alert_message_id, alert_start_time, live_timer_running
-
     while True:
         try:
             if live_timer_running and alert_message_id and alert_start_time:
                 duration = datetime.now(KYIV_TZ) - alert_start_time
                 total = int(duration.total_seconds())
                 h, m, s = total // 3600, (total % 3600) // 60, total % 60
-
-                text = (
-                    f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
-                    f"⏰ {now()}\n"
-                    f"⏱ Триває: {h:02}:{m:02}:{s:02}"
-                )
-
+                text = f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}\n⏱ Триває: {h:02}:{m:02}:{s:02}"
                 try:
                     await application.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
@@ -77,10 +77,8 @@ async def live_timer(application):
                     )
                 except Exception as e:
                     print("[EDIT ERROR]", e)
-
         except Exception as e:
             print("[TIMER ERROR]", e)
-
         await asyncio.sleep(10)
 
 # ===================== STATUS =====================
@@ -102,13 +100,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_status, last_check_time
     query = update.callback_query
     await query.answer()
-
     if query.data == "refresh":
         await query.edit_message_text(
-            f"🟢 Bot Status: RUNNING\n"
-            f"📍 Region: Kyiv (31)\n"
-            f"📡 Alert: {current_status}\n"
-            f"⏰ Last check: {last_check_time}"
+            f"🟢 Bot Status: RUNNING\n📍 Region: Kyiv (31)\n📡 Alert: {current_status}\n⏰ Last check: {last_check_time}"
         )
     elif query.data == "ping":
         await query.edit_message_text("📡 Pong!")
@@ -117,19 +111,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_alerts(application):
     global last_state, alert_start_time, last_check_time, current_status
     global alert_message_id, live_timer_running
-
     print(f"[{now()}] Bot started")
-
     while True:
         try:
             last_check_time = now()
             headers = {"X-API-Key": API_KEY} if API_KEY else {}
             data = requests.get(API_URL, headers=headers, timeout=10).json()
             states = data.get("states", data)
-
             active = any(r.get("id") == REGION_ID and r.get("alert", False) for r in states)
             current_status = "ALERT" if active else "CLEAR"
-
             if last_state is None:
                 last_state = active
             elif active != last_state:
@@ -164,10 +154,8 @@ async def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CallbackQueryHandler(button_handler))
-
     asyncio.create_task(live_timer(application))
     asyncio.create_task(check_alerts(application))
-
     await application.run_polling()
 
 if __name__ == "__main__":
