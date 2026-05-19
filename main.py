@@ -346,8 +346,8 @@ def main():
     app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
+        url_path="webhook",
         webhook_url=f"{WEBHOOK_URL}/webhook",
-        secret_token=None,
         drop_pending_updates=True,
     )
 
