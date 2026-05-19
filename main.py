@@ -19,7 +19,7 @@ print(">>> Starting main.py")
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 
 API_URL = "https://alerts.com.ua/api/states"
 REGION_ID = 31
