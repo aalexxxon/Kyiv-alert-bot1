@@ -57,27 +57,33 @@ def now():
 def is_alert(data):
     try:
 
-        # format 1
-        if isinstance(data, dict) and "states" in data:
-            data = data["states"]
+        if isinstance(data, dict):
 
-        # format 2
+            # alerts.com.ua new format
+            if "states" in data:
+                data = data["states"]
+
         if isinstance(data, list):
+
             for region in data:
 
                 region_id = (
                     region.get("regionId")
                     or region.get("id")
+                    or region.get("region_id")
                 )
 
-                alert = (
-                    region.get("activeAlerts")
-                    or region.get("alert")
+                # всі можливі поля
+                active = (
+                    region.get("alert")
+                    or region.get("active")
+                    or region.get("activeAlerts")
+                    or region.get("enabled")
                     or False
                 )
 
                 if int(region_id) == REGION_ID:
-                    return bool(alert)
+                    return bool(active)
 
         return False
 
