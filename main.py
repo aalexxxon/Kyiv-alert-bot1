@@ -19,7 +19,6 @@ print(">>> Starting main.py")
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 
 API_URL = "https://alerts.com.ua/api/states"
 REGION_ID = 31
@@ -28,16 +27,12 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 print(">>> BOT_TOKEN OK:", bool(BOT_TOKEN))
 print(">>> CHANNEL_ID:", CHANNEL_ID)
-print(">>> WEBHOOK_URL:", WEBHOOK_URL)
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN missing")
 
 if not CHANNEL_ID:
     raise RuntimeError("CHANNEL_ID missing")
-
-if not WEBHOOK_URL:
-    raise RuntimeError("WEBHOOK_URL missing")
 
 # ===================== STATE =====================
 last_state = None
@@ -196,11 +191,7 @@ def main():
 
     print("STEP 3 START")
 
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8080)),
-        url_path="webhook",
-    )
+    app.run_polling()
 
 
 if __name__ == "__main__":
