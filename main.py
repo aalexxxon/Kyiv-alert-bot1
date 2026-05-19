@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 import aiohttp
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,62 +13,83 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ===================== DEBUG =====================
 print(">>> Starting main.py")
 
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-API_URL = "https://alerts.com.ua/api/states"
 
+API_URL = "https://alerts.com.ua/api/states"
 REGION_ID = 31
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
-print(">>> BOT_TOKEN OK:", bool(BOT_TOKEN))
-print(">>> CHANNEL_ID:", CHANNEL_ID)
-
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN missing")
-
 if not CHANNEL_ID:
     raise RuntimeError("CHANNEL_ID missing")
+
+print(">>> BOT OK")
 
 
 # ===================== STATE =====================
 last_state = None
+status_cache = "CLEAR"
+last_check = None
+
 alert_start = None
 alert_msg_id = None
 timer_running = False
-status_cache = "CLEAR"
-last_check = None
 
 
 def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
 
 
-# ===================== ALERT LOOP =====================
+# ===================== SAFE PARSER =====================
+def is_alert(data) -> bool:
+    try:
+        if isinstance(data, list):
+            return any(
+                x.get("id") == REGION_ID and x.get("alert") is True
+                for x in data
+            )
+
+        if isinstance(data, dict):
+
+            if "states" in data:
+                return is_alert(data["states"])
+
+            if str(REGION_ID) in data:
+                return bool(data[str(REGION_ID)])
+
+            if REGION_ID in data:
+                return bool(data[REGION_ID])
+
+        return False
+
+    except Exception:
+        return False
+
+
+# ===================== FAST ALERT LOOP =====================
 async def alert_loop(app: Application):
-    global last_state, alert_start, alert_msg_id
-    global timer_running, status_cache, last_check
+    global last_state, status_cache, last_check
+    global alert_start, alert_msg_id, timer_running
 
-    print("[INFO] Alert loop started")
+    print("[INFO] FAST loop started")
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=5)
+    ) as session:
+
         while True:
             try:
                 last_check = now()
 
-                async with session.get(API_URL, timeout=10) as r:
+                async with session.get(API_URL) as r:
                     data = await r.json()
 
-                states = data.get("states", data)
-
-                active = any(
-                    x.get("id") == REGION_ID and x.get("alert", False)
-                    for x in states
-                )
-
+                active = is_alert(data)
                 status_cache = "ALERT" if active else "CLEAR"
 
                 if last_state is None:
@@ -83,14 +104,11 @@ async def alert_loop(app: Application):
 
                         msg = await app.bot.send_message(
                             chat_id=CHANNEL_ID,
-                            text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("📡 Status", callback_data="status")]
-                            ])
+                            text="🚨 КИЇВ | ТРИВОГА\n⏱️ 00:00:00"
                         )
 
                         alert_msg_id = msg.message_id
-                        print("[ALERT] START")
+                        print("[FAST] ALERT START")
 
                     # ALERT END
                     else:
@@ -102,14 +120,15 @@ async def alert_loop(app: Application):
                             text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
                         )
 
-                        print("[ALERT] END")
+                        print("[FAST] ALERT END")
 
                     last_state = active
 
             except Exception as e:
-                print("[ALERT ERROR]", e)
+                print("[FAST ERROR]", e)
 
-            await asyncio.sleep(15)
+            # ⚡ 2–4 сек детект
+            await asyncio.sleep(3)
 
 
 # ===================== TIMER =====================
@@ -121,6 +140,7 @@ async def timer_loop(app: Application):
     while True:
         try:
             if timer_running and alert_msg_id and alert_start:
+
                 delta = datetime.now(KYIV_TZ) - alert_start
                 sec = int(delta.total_seconds())
 
@@ -129,7 +149,7 @@ async def timer_loop(app: Application):
                 s = sec % 60
 
                 text = (
-                    "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
+                    "🚨 КИЇВ | ТРИВОГА\n"
                     f"⏰ {now()}\n"
                     f"⏱️ {h:02}:{m:02}:{s:02}"
                 )
@@ -140,7 +160,7 @@ async def timer_loop(app: Application):
                         message_id=alert_msg_id,
                         text=text
                     )
-                except Exception:
+                except:
                     pass
 
         except Exception as e:
@@ -158,7 +178,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
@@ -166,29 +186,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(f"📡 Status: {status_cache}")
 
 
-# ===================== START =====================
+# ===================== MAIN =====================
 def main():
-    print("STEP 1: create app")
+    print("STEP 1 create app")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    print("STEP 2: add handlers")
+    print("STEP 2 add handlers")
 
     app.add_handler(CommandHandler("status", status_cmd))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(button))
 
-    async def start_tasks(app: Application):
-        print("[INFO] Starting background tasks")
+    async def start(app: Application):
+        print("[INFO] START TASKS")
         app.create_task(alert_loop(app))
         app.create_task(timer_loop(app))
 
-    app.post_init = start_tasks
+    app.post_init = start
 
-    print("STEP 3: START POLLING BOT")
+    print("STEP 3 RUN BOT")
 
-    app.run_polling(
-        drop_pending_updates=True
-    )
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
