@@ -39,6 +39,7 @@ print(">>> CHANNEL_ID:", CHANNEL_ID)
 # ===================== CONFIG =====================
 
 API_URL = "https://alerts.com.ua/api/states"
+
 REGION_ID = 31
 
 WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
@@ -94,11 +95,11 @@ async def check_alerts(app):
 
                 current_status = "ALERT" if active else "CLEAR"
 
-                # first launch
+                # FIRST START
                 if last_state is None:
                     last_state = active
 
-                # state changed
+                # STATE CHANGED
                 elif active != last_state:
 
                     # ================= ALERT START =================
