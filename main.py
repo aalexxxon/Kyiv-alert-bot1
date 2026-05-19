@@ -1,39 +1,3 @@
-import os
-import asyncio
-import logging
-from datetime import datetime
-import random
-
-import pytz
-
-from telegram import Update
-from telegram.error import TelegramError
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
-
-# ===================== LOGGING =====================
-logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
-
-logger.info(">>> Starting main.py (FAKE TEST MODE)")
-
-# ===================== ENV =====================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
-
-REGION_ID = 31
-KYIV_TZ = pytz.timezone("Europe/Kyiv")
-
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN missing")
-if not CHANNEL_ID:
     raise RuntimeError("CHANNEL_ID missing")
 
 logger.info(">>> BOT OK — token and channel loaded")
