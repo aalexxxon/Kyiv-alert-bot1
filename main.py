@@ -174,16 +174,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===================== STARTUP =====================
 async def post_init(app: Application):
     print("[INFO] POST INIT")
-
-    # перевірка webhook url
-    webhook = f"{WEBHOOK_URL}/webhook"
-    print("[WEBHOOK]", webhook)
-
-    await app.bot.set_webhook(
-        url=webhook,
-        drop_pending_updates=True
-    )
-
     app.create_task(alert_loop(app))
     app.create_task(timer_loop(app))
 
@@ -210,6 +200,8 @@ def main():
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 8080)),
         url_path="webhook",
+        webhook_url=f"{WEBHOOK_URL}/webhook",
+        drop_pending_updates=True,
     )
 
 
