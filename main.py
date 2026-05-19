@@ -193,10 +193,23 @@ def main():
 
     print(">>> SETTING WEBHOOK...")
 
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000)),
-        webhook_url=f"{WEBHOOK_URL}/webhook"
+app = Application.builder().token(BOT_TOKEN).build()
+
+app.add_handler(CommandHandler("status", status_cmd))
+app.add_handler(CallbackQueryHandler(button))
+
+async def post_init(app):
+    app.create_task(check_alerts(app))
+    app.create_task(live_timer(app))
+
+    await app.bot.set_webhook(
+        url=f"{WEBHOOK_URL}/webhook",
+        drop_pending_updates=True
+    )
+
+app.post_init = post_init
+
+app.run_polling()  # ⚠️ НЕ для polling, а як server loop fallback
     )
 
 
