@@ -144,7 +144,8 @@ async def live_timer(app):
                     f"⏰ {now()}\n"
                     f"⏱️ {h:02}:{m:02}:{s:02}"
                 )
-try:
+                
+                try:
                     await app.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
                         message_id=alert_message_id,
