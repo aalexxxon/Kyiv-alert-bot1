@@ -213,4 +213,9 @@ def main():
     logger.info("STEP 3 — starting polling")
     app.run_polling(
         drop_pending_updates=True,
-        allowed_updates=Update.ALL
+        allowed_updates=Update.ALL_TYPES,
+    )
+
+
+if __name__ == "__main__":
+    main()
