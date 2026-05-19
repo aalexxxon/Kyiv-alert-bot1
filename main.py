@@ -200,7 +200,7 @@ def main():
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 8080)),
         url_path="webhook",
-        webhook_url=f"{WEBHOOK_URL}/webhook",
+        webhook_url=WEBHOOK_URL,
         drop_pending_updates=True,
     )
 
