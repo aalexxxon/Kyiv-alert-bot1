@@ -1,5 +1,4 @@
 import os
-import asyncio
 import logging
 from datetime import datetime
 
@@ -81,96 +80,85 @@ def is_alert(data):
         return False
 
 
-# ===================== FAST ALERT LOOP =====================
-async def alert_loop(app: Application):
+# ===================== JOBS =====================
+async def alert_job(context: ContextTypes.DEFAULT_TYPE):
     global last_state, status_cache, last_check
     global alert_start, alert_msg_id, timer_running
 
-    logger.info("[FAST] Alert loop started")
+    try:
+        last_check = now()
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5)
+        ) as session:
+            async with session.get(API_URL) as r:
+                data = await r.json()
 
-    async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=5)
-    ) as session:
-        while True:
-            try:
-                last_check = now()
-                async with session.get(API_URL) as r:
-                    data = await r.json()
+        active = is_alert(data)
+        status_cache = "ALERT" if active else "CLEAR"
 
-                active = is_alert(data)
-                status_cache = "ALERT" if active else "CLEAR"
+        if last_state is None:
+            last_state = active
 
-                if last_state is None:
-                    last_state = active
+        elif active != last_state:
+            # ALERT START
+            if active:
+                alert_start = datetime.now(KYIV_TZ)
+                timer_running = True
+                try:
+                    msg = await context.bot.send_message(
+                        chat_id=CHANNEL_ID,
+                        text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
+                    )
+                    alert_msg_id = msg.message_id
+                    logger.info("[FAST] ALERT START — message_id=%s", alert_msg_id)
+                except TelegramError as e:
+                    logger.error("[FAST] Failed to send ALERT START message: %s", e)
 
-                elif active != last_state:
-                    # ALERT START
-                    if active:
-                        alert_start = datetime.now(KYIV_TZ)
-                        timer_running = True
-                        try:
-                            msg = await app.bot.send_message(
-                                chat_id=CHANNEL_ID,
-                                text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
-                            )
-                            alert_msg_id = msg.message_id
-                            logger.info("[FAST] ALERT START — message_id=%s", alert_msg_id)
-                        except TelegramError as e:
-                            logger.error("[FAST] Failed to send ALERT START message: %s", e)
+            # ALERT END
+            else:
+                timer_running = False
+                alert_msg_id = None
+                try:
+                    await context.bot.send_message(
+                        chat_id=CHANNEL_ID,
+                        text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ",
+                    )
+                    logger.info("[FAST] ALERT END — all-clear message sent")
+                except TelegramError as e:
+                    logger.error("[FAST] Failed to send ALERT END message: %s", e)
 
-                    # ALERT END
-                    else:
-                        timer_running = False
-                        alert_msg_id = None
-                        try:
-                            await app.bot.send_message(
-                                chat_id=CHANNEL_ID,
-                                text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ",
-                            )
-                            logger.info("[FAST] ALERT END — all-clear message sent")
-                        except TelegramError as e:
-                            logger.error("[FAST] Failed to send ALERT END message: %s", e)
+            last_state = active
 
-                    last_state = active
-
-            except Exception as e:
-                logger.error("[FAST ERROR] %s", e)
-
-            await asyncio.sleep(3)
+    except Exception as e:
+        logger.error("[FAST ERROR] %s", e)
 
 
-# ===================== TIMER =====================
-async def timer_loop(app: Application):
+async def timer_job(context: ContextTypes.DEFAULT_TYPE):
     global alert_msg_id, alert_start, timer_running
 
-    logger.info("[TIMER] Timer loop started")
+    try:
+        if timer_running and alert_msg_id and alert_start:
+            delta = datetime.now(KYIV_TZ) - alert_start
+            sec = int(delta.total_seconds())
+            h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
 
-    while True:
-        try:
-            if timer_running and alert_msg_id and alert_start:
-                delta = datetime.now(KYIV_TZ) - alert_start
-                sec = int(delta.total_seconds())
-                h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
+            text = (
+                "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
+                f"⏰ {now()}\n"
+                f"⏱️ {h:02}:{m:02}:{s:02}"
+            )
 
-                text = (
-                    "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
-                    f"⏰ {now()}\n"
-                    f"⏱️ {h:02}:{m:02}:{s:02}"
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=CHANNEL_ID,
+                    message_id=alert_msg_id,
+                    text=text,
                 )
+            except TelegramError as e:
+                logger.warning("[TIMER] Could not edit message: %s", e)
 
-                try:
-                    await app.bot.edit_message_text(
-                        chat_id=CHANNEL_ID,
-                        message_id=alert_msg_id,
-                        text=text,
-                    )
-                except TelegramError as e:
-                    logger.warning("[TIMER] Could not edit message: %s", e)
-
-        except Exception as e:
-            logger.error("[TIMER ERROR] %s", e)
-
-        await asyncio.sleep(10)
+    except Exception as e:
+        logger.error("[TIMER ERROR] %s", e)
 
 
 # ===================== COMMANDS =====================
@@ -190,27 +178,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ===================== MAIN =====================
-async def post_init(app: Application) -> None:
-    logger.info("[INIT] Application ready — starting background tasks")
-    app.create_task(alert_loop(app))
-    app.create_task(timer_loop(app))
-
-
 def main():
     logger.info("STEP 1 — building application")
 
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .post_init(post_init)
-        .build()
-    )
+    app = Application.builder().token(BOT_TOKEN).build()
 
     logger.info("STEP 2 — registering handlers")
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CallbackQueryHandler(button))
 
-    logger.info("STEP 3 — starting polling")
+    logger.info("STEP 3 — scheduling jobs")
+    app.job_queue.run_repeating(alert_job, interval=3, first=0)
+    app.job_queue.run_repeating(timer_job, interval=10, first=0)
+
+    logger.info("STEP 4 — starting polling")
     app.run_polling(
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
