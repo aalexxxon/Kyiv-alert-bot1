@@ -210,7 +210,7 @@ async def post_init(app):
 app.post_init = post_init
 
 app.run_polling()  # ⚠️ НЕ для polling, а як server loop fallback
-    )
+)
 
 
 if __name__ == "__main__":
