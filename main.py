@@ -5,6 +5,7 @@ from datetime import datetime
 
 import pytz
 import aiohttp
+from aiohttp import web
 
 from telegram import Update
 from telegram.error import TelegramError
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-logger.info(">>> Starting main.py")
+logger.info(">>> Starting main.py with health-check")
 
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -48,10 +49,19 @@ alert_start = None
 alert_msg_id = None
 timer_running = False
 
-
 def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
 
+# ===================== HEALTH ENDPOINT =====================
+async def health(request):
+    return web.Response(text="Bot is running")
+
+def start_webserver():
+    app = web.Application()
+    app.router.add_get("/", health)
+    port = int(os.getenv("PORT", 8080))  # Railway задаёт PORT автоматически
+    logger.info(f"Starting health-check server on port {port}")
+    asyncio.create_task(web._run_app(app, port=port))
 
 # ===================== SAFE PARSER =====================
 def is_alert(data):
@@ -80,7 +90,6 @@ def is_alert(data):
         logger.error("[PARSER ERROR] %s", e)
         return False
 
-
 # ===================== FAST ALERT LOOP =====================
 async def alert_loop(app: Application):
     global last_state, status_cache, last_check
@@ -104,7 +113,6 @@ async def alert_loop(app: Application):
                     last_state = active
 
                 elif active != last_state:
-                    # ALERT START
                     if active:
                         alert_start = datetime.now(KYIV_TZ)
                         timer_running = True
@@ -117,8 +125,6 @@ async def alert_loop(app: Application):
                             logger.info("[FAST] ALERT START — message_id=%s", alert_msg_id)
                         except TelegramError as e:
                             logger.error("[FAST] Failed to send ALERT START message: %s", e)
-
-                    # ALERT END
                     else:
                         timer_running = False
                         alert_msg_id = None
@@ -137,7 +143,6 @@ async def alert_loop(app: Application):
                 logger.error("[FAST ERROR] %s", e)
 
             await asyncio.sleep(3)
-
 
 # ===================== TIMER =====================
 async def timer_loop(app: Application):
@@ -172,7 +177,6 @@ async def timer_loop(app: Application):
 
         await asyncio.sleep(10)
 
-
 # ===================== COMMANDS =====================
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -181,20 +185,18 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⏰ Last check: {last_check}"
     )
 
-
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     if q.data == "status":
         await q.edit_message_text(f"📡 Status: {status_cache}")
 
-
 # ===================== MAIN =====================
 async def post_init(app: Application) -> None:
     logger.info("[INIT] Application ready — starting background tasks")
     asyncio.create_task(alert_loop(app))
     asyncio.create_task(timer_loop(app))
-
+    start_webserver()  # запускаем health-check сервер
 
 def main():
     logger.info("STEP 1 — building application")
@@ -215,7 +217,6 @@ def main():
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
     )
-
 
 if __name__ == "__main__":
     main()
