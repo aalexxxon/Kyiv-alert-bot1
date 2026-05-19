@@ -1,11 +1,13 @@
 import os
 import asyncio
+import logging
 from datetime import datetime
 
 import pytz
 import aiohttp
 
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,7 +15,13 @@ from telegram.ext import (
     ContextTypes,
 )
 
-print(">>> Starting main.py")
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+logger.info(">>> Starting main.py")
 
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -28,7 +36,7 @@ if not BOT_TOKEN:
 if not CHANNEL_ID:
     raise RuntimeError("CHANNEL_ID missing")
 
-print(">>> BOT OK")
+logger.info(">>> BOT OK — token and channel loaded")
 
 
 # ===================== STATE =====================
@@ -76,7 +84,7 @@ async def alert_loop(app: Application):
     global last_state, status_cache, last_check
     global alert_start, alert_msg_id, timer_running
 
-    print("[INFO] FAST loop started")
+    logger.info("[FAST] Alert loop started")
 
     async with aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=5)
@@ -102,30 +110,40 @@ async def alert_loop(app: Application):
                         alert_start = datetime.now(KYIV_TZ)
                         timer_running = True
 
-                        msg = await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text="🚨 КИЇВ | ТРИВОГА\n⏱️ 00:00:00"
-                        )
-
-                        alert_msg_id = msg.message_id
-                        print("[FAST] ALERT START")
+                        try:
+                            msg = await app.bot.send_message(
+                                chat_id=CHANNEL_ID,
+                                text="🚨 КИЇВ | ТРИВОГА\n⏱️ 00:00:00",
+                            )
+                            alert_msg_id = msg.message_id
+                            logger.info(
+                                "[FAST] ALERT START — message_id=%s", alert_msg_id
+                            )
+                        except TelegramError as e:
+                            logger.error(
+                                "[FAST] Failed to send ALERT START message: %s", e
+                            )
 
                     # ALERT END
                     else:
                         timer_running = False
                         alert_msg_id = None
 
-                        await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
-                        )
-
-                        print("[FAST] ALERT END")
+                        try:
+                            await app.bot.send_message(
+                                chat_id=CHANNEL_ID,
+                                text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ",
+                            )
+                            logger.info("[FAST] ALERT END — all-clear message sent")
+                        except TelegramError as e:
+                            logger.error(
+                                "[FAST] Failed to send ALERT END message: %s", e
+                            )
 
                     last_state = active
 
             except Exception as e:
-                print("[FAST ERROR]", e)
+                logger.error("[FAST ERROR] %s", e)
 
             # ⚡ 2–4 сек детект
             await asyncio.sleep(3)
@@ -135,7 +153,7 @@ async def alert_loop(app: Application):
 async def timer_loop(app: Application):
     global alert_msg_id, alert_start, timer_running
 
-    print("[INFO] Timer started")
+    logger.info("[TIMER] Timer loop started")
 
     while True:
         try:
@@ -158,13 +176,13 @@ async def timer_loop(app: Application):
                     await app.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
                         message_id=alert_msg_id,
-                        text=text
+                        text=text,
                     )
-                except:
-                    pass
+                except TelegramError as e:
+                    logger.warning("[TIMER] Could not edit message: %s", e)
 
         except Exception as e:
-            print("[TIMER ERROR]", e)
+            logger.error("[TIMER ERROR] %s", e)
 
         await asyncio.sleep(10)
 
@@ -187,27 +205,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ===================== MAIN =====================
+async def post_init(app: Application) -> None:
+    """Called by python-telegram-bot after the Application is fully started.
+    Creating tasks here (instead of before run_polling) avoids the
+    'coroutine attached to a different loop' / 'task created before app
+    is running' warnings and ensures only one polling instance is active."""
+    logger.info("[INIT] Application ready — starting background tasks")
+    app.create_task(alert_loop(app))
+    app.create_task(timer_loop(app))
+
+
 def main():
-    print("STEP 1 create app")
+    logger.info("STEP 1 — building application")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
-    print("STEP 2 add handlers")
+    logger.info("STEP 2 — registering handlers")
 
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CallbackQueryHandler(button))
 
-    async def start(app: Application):
-        print("[INFO] START TASKS")
-        app.create_task(alert_loop(app))
-        app.create_task(timer_loop(app))
+    logger.info("STEP 3 — starting polling")
 
-    app.post_init = start
-
-    print("STEP 3 RUN BOT")
-
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES,
+    )
 
 
 if __name__ == "__main__":
     main()
+
