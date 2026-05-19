@@ -9,8 +9,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
+    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
+    filters,
 )
 
 # ===================== DEBUG =====================
@@ -150,7 +152,29 @@ async def timer_loop(app: Application):
 
 
 # ===================== COMMANDS =====================
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command"""
+    await update.message.reply_text(
+        "👋 Привіт! Я бот для моніторингу тривог у Києві.\n\n"
+        "Доступні команди:\n"
+        "/status - Поточний статус\n"
+        "/help - Довідка"
+    )
+
+
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command"""
+    await update.message.reply_text(
+        "📖 Довідка:\n\n"
+        "/start - Привіт\n"
+        "/status - Поточний статус тривог\n"
+        "/help - Ця довідка\n\n"
+        "Бот автоматично надсилає сповіщення про тривоги в канал."
+    )
+
+
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /status command"""
     await update.message.reply_text(
         f"🟢 Bot OK\n"
         f"📡 Status: {status_cache}\n"
@@ -159,11 +183,27 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline button clicks"""
     q = update.callback_query
     await q.answer()
 
     if q.data == "status":
         await q.edit_message_text(f"📡 Status: {status_cache}")
+
+
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle regular messages"""
+    user_message = update.message.text.lower()
+    
+    if "статус" in user_message or "status" in user_message:
+        await update.message.reply_text(
+            f"📡 Поточний статус: {status_cache}\n"
+            f"⏰ Остання перевірка: {last_check}"
+        )
+    else:
+        await update.message.reply_text(
+            "Я не розумію цю команду. Напишіть /help для списку команд."
+        )
 
 
 # ===================== STARTUP =====================
@@ -186,8 +226,16 @@ def main():
 
     print("STEP 2")
 
+    # Add command handlers
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
+    
+    # Add button handler
     app.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Add message handler for regular text
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     print("STEP 3 START")
 
