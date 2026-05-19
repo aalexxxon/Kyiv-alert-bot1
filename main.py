@@ -286,7 +286,6 @@ def main():
         .build()
     )
 
-    # ================= COMMANDS =================
     application.add_handler(
         CommandHandler(
             "status",
@@ -294,7 +293,6 @@ def main():
         )
     )
 
-    # ================= BUTTONS =================
     application.add_handler(
         CallbackQueryHandler(
             button_handler
@@ -303,7 +301,6 @@ def main():
 
     print(">>> BOT STARTED")
 
-    # ================= BACKGROUND =================
     async def start_tasks(app):
 
         asyncio.create_task(
@@ -314,12 +311,16 @@ def main():
             live_timer(app)
         )
 
+        # remove webhook
+        await app.bot.delete_webhook(
+            drop_pending_updates=True
+        )
+
     application.post_init = start_tasks
 
-    # ================= START BOT =================
     application.run_polling()
 
 
 # ===================== START =====================
-if __name__ == "__main__":
+if name == "main":
     main()
