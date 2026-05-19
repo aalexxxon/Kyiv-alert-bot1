@@ -5,7 +5,13 @@ from datetime import datetime
 import aiohttp
 import pytz
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+# ✅ FIX: додано Update
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -31,10 +37,7 @@ if not CHANNEL_ID:
 print(">>> BOT_TOKEN:", bool(BOT_TOKEN))
 print(">>> CHANNEL_ID:", CHANNEL_ID)
 
-# Railway gives port automatically
-PORT = int(os.getenv("PORT", "8000"))
-
-# IMPORTANT: твій Railway URL
+PORT = int(os.environ.get("PORT", 8000))
 WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
 
 # ===================== CONFIG =====================
@@ -144,15 +147,15 @@ async def live_timer(app):
                     f"⏰ {now()}\n"
                     f"⏱️ {h:02}:{m:02}:{s:02}"
                 )
-                
+
                 try:
                     await app.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
                         message_id=alert_message_id,
                         text=text
                     )
-                except:
-                    pass
+                except Exception as e:
+                    print("[EDIT ERROR]", e)
 
         except Exception as e:
             print("[TIMER ERROR]", e)
@@ -160,7 +163,7 @@ async def live_timer(app):
         await asyncio.sleep(10)
 
 
-# ===================== COMMANDS =====================
+# ===================== COMMAND =====================
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -186,7 +189,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def post_init(app):
     print("[INFO] Starting background tasks")
 
-    # важливо: без конфлікту запуску
     asyncio.create_task(check_alerts(app))
     asyncio.create_task(live_timer(app))
 
@@ -201,7 +203,7 @@ async def post_init(app):
 # ===================== MAIN =====================
 
 def main():
-    print("STEP 1")
+    print("STEP 1: creating app")
 
     app = (
         Application.builder()
@@ -210,14 +212,13 @@ def main():
         .build()
     )
 
-    print("STEP 2")
+    print("STEP 2: adding handlers")
 
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     print(">>> START WEBHOOK")
 
-    # 🔥 FIX: Railway-safe webhook mode
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
@@ -227,5 +228,5 @@ def main():
     )
 
 
-if name == "main":
+if __name__ == "__main__":
     main()
