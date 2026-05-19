@@ -56,12 +56,16 @@ def now():
 async def health(request):
     return web.Response(text="Bot is running")
 
-def start_webserver():
+async def start_webserver():
+    port = int(os.getenv("PORT", 8080))
     app = web.Application()
     app.router.add_get("/", health)
-    port = int(os.getenv("PORT", 8080))  # Railway задаёт PORT автоматически
-    logger.info(f"Starting health-check server on port {port}")
-    asyncio.create_task(web._run_app(app, port=port))
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Health-check server started on 0.0.0.0:{port}")
 
 # ===================== SAFE PARSER =====================
 def is_alert(data):
@@ -196,7 +200,7 @@ async def post_init(app: Application) -> None:
     logger.info("[INIT] Application ready — starting background tasks")
     asyncio.create_task(alert_loop(app))
     asyncio.create_task(timer_loop(app))
-    start_webserver()  # запускаем health-check сервер
+    asyncio.create_task(start_webserver())  # запускаем health-check
 
 def main():
     logger.info("STEP 1 — building application")
