@@ -41,6 +41,8 @@ print(">>> CHANNEL_ID:", CHANNEL_ID)
 API_URL = "https://alerts.com.ua/api/states"
 REGION_ID = 31
 
+WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
+
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 # ===================== STATE =====================
@@ -55,7 +57,6 @@ current_status = "CLEAR"
 last_check_time = "never"
 
 # ===================== TIME =====================
-
 
 def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
@@ -302,9 +303,14 @@ async def post_init(app):
     asyncio.create_task(check_alerts(app))
     asyncio.create_task(live_timer(app))
 
-    await app.bot.delete_webhook(
+    await app.bot.set_webhook(
+        url=f"{WEBHOOK_URL}/webhook",
         drop_pending_updates=True
     )
+
+    info = await app.bot.get_webhook_info()
+
+    print("[WEBHOOK INFO]", info)
 
 
 # ===================== MAIN =====================
@@ -335,10 +341,14 @@ def main():
         )
     )
 
-    print(">>> BOT STARTED")
+    print(">>> SETTING WEBHOOK...")
 
-    app.run_polling(
-        drop_pending_updates=True
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000)),
+        webhook_url=f"{WEBHOOK_URL}/webhook",
+        secret_token=None,
+        drop_pending_updates=True,
     )
 
 
