@@ -16,13 +16,13 @@ print(">>> Starting main.py")
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 # ===================== FLASK =====================
-flask_app = Flask(__name__)
+flask_app = Flask(name)
 
 @flask_app.route("/")
 def home():
     return "Bot is running"
 
-# 🔹 Healthcheck route для Railway
+# 🔹 Healthcheck route для Railway + UptimeRobot
 @flask_app.route("/health")
 def health():
     return "OK", 200
@@ -73,7 +73,7 @@ async def live_timer(application):
                 duration = datetime.now(KYIV_TZ) - alert_start_time
                 total = int(duration.total_seconds())
                 h, m, s = total // 3600, (total % 3600) // 60, total % 60
-                text = f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}\n⏱ Триває: {h:02}:{m:02}:{s:02}"
+                text = f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}\n⏱️ Триває: {h:02}:{m:02}:{s:02}"
                 try:
                     await application.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
@@ -111,9 +111,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif query.data == "ping":
         await query.edit_message_text("📡 Pong!")
-
-# ===================== ALERT LOOP =====================
-async def check_alerts(application):
+        
+        # ===================== ALERT LOOP =====================
+        async def check_alerts(application):
     global last_state, alert_start_time, last_check_time, current_status
     global alert_message_id, live_timer_running
     print(f"[{now()}] Bot started")
@@ -133,18 +133,18 @@ async def check_alerts(application):
                     live_timer_running = True
                     msg = await application.bot.send_message(
                         chat_id=CHANNEL_ID,
-                        text=f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}\n⏱ Триває: 00:00:00",
+                        text=f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}\n⏱️ Триває: 00:00:00",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📡 Статус", callback_data="refresh")]])
                     )
                     alert_message_id = msg.message_id
                 else:
                     live_timer_running = False
                     alert_message_id = None
-                    duration_text = "⏱ Тривалість невідома"
+                    duration_text = "⏱️ Тривалість невідома"
                     if alert_start_time:
                         duration = datetime.now(KYIV_TZ) - alert_start_time
                         h, m, s = duration.seconds // 3600, (duration.seconds % 3600) // 60, duration.seconds % 60
-                        duration_text = f"⏱ Тривала: {h:02}:{m:02}:{s:02}"
+                        duration_text = f"⏱️ Тривала: {h:02}:{m:02}:{s:02}"
                     await application.bot.send_message(
                         chat_id=CHANNEL_ID,
                         text=f"🟢 КИЇВ | ВІДБІЙ ПОВІТРЯНОЇ ТРИВОГИ\n⏰ {now()}\n{duration_text}"
@@ -171,5 +171,5 @@ def main():
         webhook_url=f"https://kyiv-alert-bot1-production.up.railway.app/{BOT_TOKEN}"
     )
 
-if __name__ == "__main__":
+if name == "main":
     main()
