@@ -1,3 +1,40 @@
+import os
+import asyncio
+import logging
+from datetime import datetime
+
+import pytz
+import aiohttp
+
+from telegram import Update
+from telegram.error import TelegramError
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+
+# ===================== LOGGING =====================
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+logger.info(">>> Starting main.py")
+
+# ===================== ENV =====================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
+
+API_URL = "https://alerts.com.ua/api/states"
+REGION_ID = 31
+KYIV_TZ = pytz.timezone("Europe/Kyiv")
+
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN missing")
+if not CHANNEL_ID:
     raise RuntimeError("CHANNEL_ID missing")
 
 logger.info(">>> BOT OK — token and channel loaded")
@@ -10,33 +47,34 @@ last_check = None
 alert_start = None
 alert_msg_id = None
 timer_running = False
-manual_override = None  # True/False для ручного управления, None = авто
 
 
 def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
 
 
-# ===================== FAKE API =====================
-async def fake_api_state():
-    """Эмулируем ответ API: случайно включаем/выключаем тревогу, если нет ручного override"""
-    if manual_override is not None:
-        alert = manual_override
-    else:
-        alert = random.choice([True, False])
-    return [
-        {
-            "regionId": REGION_ID,
-            "alert": alert
-        }
-    ]
-
-
+# ===================== SAFE PARSER =====================
 def is_alert(data):
     try:
-        for region in data:
-            if int(region.get("regionId")) == REGION_ID:
-                return bool(region.get("alert"))
+        if isinstance(data, dict) and "states" in data:
+            data = data["states"]
+
+        if isinstance(data, list):
+            for region in data:
+                region_id = (
+                    region.get("regionId")
+                    or region.get("id")
+                    or region.get("region_id")
+                )
+                active = (
+                    region.get("alert")
+                    or region.get("active")
+                    or region.get("activeAlerts")
+                    or region.get("enabled")
+                    or False
+                )
+                if int(region_id) == REGION_ID:
+                    return bool(active)
         return False
     except Exception as e:
         logger.error("[PARSER ERROR] %s", e)
@@ -48,52 +86,57 @@ async def alert_loop(app: Application):
     global last_state, status_cache, last_check
     global alert_start, alert_msg_id, timer_running
 
-    logger.info("[FAST] Alert loop started (FAKE API)")
+    logger.info("[FAST] Alert loop started")
 
-    while True:
-        try:
-            last_check = now()
-            data = await fake_api_state()
-            active = is_alert(data)
-            status_cache = "ALERT" if active else "CLEAR"
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=5)
+    ) as session:
+        while True:
+            try:
+                last_check = now()
+                async with session.get(API_URL) as r:
+                    data = await r.json()
 
-            if last_state is None:
-                last_state = active
+                active = is_alert(data)
+                status_cache = "ALERT" if active else "CLEAR"
 
-            elif active != last_state:
-                # ALERT START
-                if active:
-                    alert_start = datetime.now(KYIV_TZ)
-                    timer_running = True
-                    try:
-                        msg = await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
-                        )
-                        alert_msg_id = msg.message_id
-                        logger.info("[FAST] ALERT START — message_id=%s", alert_msg_id)
-                    except TelegramError as e:
-                        logger.error("[FAST] Failed to send ALERT START message: %s", e)
+                if last_state is None:
+                    last_state = active
 
-                # ALERT END
-                else:
-                    timer_running = False
-                    alert_msg_id = None
-                    try:
-                        await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ",
-                        )
-                        logger.info("[FAST] ALERT END — all-clear message sent")
-                    except TelegramError as e:
-                        logger.error("[FAST] Failed to send ALERT END message: %s", e)
+                elif active != last_state:
+                    # ALERT START
+                    if active:
+                        alert_start = datetime.now(KYIV_TZ)
+                        timer_running = True
+                        try:
+                            msg = await app.bot.send_message(
+                                chat_id=CHANNEL_ID,
+                                text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
+                            )
+                            alert_msg_id = msg.message_id
+                            logger.info("[FAST] ALERT START — message_id=%s", alert_msg_id)
+                        except TelegramError as e:
+                            logger.error("[FAST] Failed to send ALERT START message: %s", e)
 
-                last_state = active
+                    # ALERT END
+                    else:
+                        timer_running = False
+                        alert_msg_id = None
+                        try:
+                            await app.bot.send_message(
+                                chat_id=CHANNEL_ID,
+                                text="🟢 КИЇВ | ВІДБІЙ ТРИВОГИ",
+                            )
+                            logger.info("[FAST] ALERT END — all-clear message sent")
+                        except TelegramError as e:
+                            logger.error("[FAST] Failed to send ALERT END message: %s", e)
 
-        except Exception as e:
-            logger.error("[FAST ERROR] %s", e)
+                    last_state = active
 
-        await asyncio.sleep(5)
+            except Exception as e:
+                logger.error("[FAST ERROR] %s", e)
+
+            await asyncio.sleep(3)
 
 
 # ===================== TIMER =====================
@@ -133,29 +176,10 @@ async def timer_loop(app: Application):
 # ===================== COMMANDS =====================
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"🟢 Bot RUNNING (FAKE TEST)\n"
+        f"🟢 Bot RUNNING\n"
         f"📡 Status: {status_cache}\n"
-        f"⏰ Last check: {last_check}\n"
-        f"⚙️ Manual override: {manual_override}"
+        f"⏰ Last check: {last_check}"
     )
-
-
-async def alert_on_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global manual_override
-    manual_override = True
-    await update.message.reply_text("🚨 Manual ALERT ON")
-
-
-async def alert_off_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global manual_override
-    manual_override = False
-    await update.message.reply_text("🟢 Manual ALERT OFF")
-
-
-async def alert_auto_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global manual_override
-    manual_override = None
-    await update.message.reply_text("🔄 ALERT AUTO MODE — random fake API")
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -184,9 +208,6 @@ def main():
 
     logger.info("STEP 2 — registering handlers")
     app.add_handler(CommandHandler("status", status_cmd))
-    app.add_handler(CommandHandler("alert_on", alert_on_cmd))
-    app.add_handler(CommandHandler("alert_off", alert_off_cmd))
-    app.add_handler(CommandHandler("alert_auto", alert_auto_cmd))
     app.add_handler(CallbackQueryHandler(button))
 
     logger.info("STEP 3 — starting polling")
