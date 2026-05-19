@@ -306,7 +306,7 @@ async def check_alerts(application):
         await asyncio.sleep(20)
 
 # ===================== MAIN =====================
-async def main():
+def main():
 
     application = (
         Application.builder()
@@ -314,7 +314,7 @@ async def main():
         .build()
     )
 
-    # commands
+    # ================= COMMANDS =================
     application.add_handler(
         CommandHandler(
             "status",
@@ -322,7 +322,7 @@ async def main():
         )
     )
 
-    # buttons
+    # ================= BUTTONS =================
     application.add_handler(
         CallbackQueryHandler(
             button_handler
@@ -331,18 +331,23 @@ async def main():
 
     print(">>> BOT STARTED")
 
-    # background tasks
-    asyncio.create_task(
-        live_timer(application)
-    )
+    # ================= BACKGROUND =================
+    async def start_tasks(app):
 
-    asyncio.create_task(
-        check_alerts(application)
-    )
+        asyncio.create_task(
+            check_alerts(app)
+        )
 
-    # start polling
-    await application.run_polling()
+        asyncio.create_task(
+            live_timer(app)
+        )
+
+    application.post_init = start_tasks
+
+    # ================= START BOT =================
+    application.run_polling()
+
 
 # ===================== START =====================
-if __name__ == "__main__":
-    asyncio.run(main())
+if name == "main":
+    main()
