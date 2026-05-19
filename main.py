@@ -3,9 +3,7 @@ import requests
 from datetime import datetime
 import os
 import pytz
-import threading
 
-from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -19,32 +17,6 @@ print(">>> Starting main.py")
 
 # ===================== TIMEZONE =====================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
-
-# ===================== FLASK =====================
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "Bot is running"
-
-@flask_app.route("/health")
-def health():
-    return "OK", 200
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-
-    print(f">>> Flask starting on port {port}")
-
-    flask_app.run(
-        host="0.0.0.0",
-        port=port
-    )
-
-threading.Thread(
-    target=run_web,
-    daemon=True
-).start()
 
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
