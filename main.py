@@ -113,7 +113,7 @@ async def alert_loop(app: Application):
                         try:
                             msg = await app.bot.send_message(
                                 chat_id=CHANNEL_ID,
-                                text="🚨 КИЇВ | ТРИВОГА\n⏱️ 00:00:00",
+                                text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
                             )
                             alert_msg_id = msg.message_id
                             logger.info(
@@ -167,7 +167,7 @@ async def timer_loop(app: Application):
                 s = sec % 60
 
                 text = (
-                    "🚨 КИЇВ | ТРИВОГА\n"
+                    "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
                     f"⏰ {now()}\n"
                     f"⏱️ {h:02}:{m:02}:{s:02}"
                 )
