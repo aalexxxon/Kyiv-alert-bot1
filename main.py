@@ -18,7 +18,7 @@ API_KEY = os.getenv("ALERTS_API_KEY", "")
 REGION_ID = 31
 API_URL = "https://alerts.com.ua/api/states"
 
-WEBHOOK_URL = "http://kyiv-alert-bot1-production.up.railway.app"
+WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
 
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
