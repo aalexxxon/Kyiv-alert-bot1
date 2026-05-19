@@ -279,48 +279,22 @@ async def check_alerts(application):
 
 # ===================== MAIN =====================
 def main():
+    application = Application.builder().token(BOT_TOKEN).build()
 
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "status",
-            status
-        )
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(
-            button_handler
-        )
-    )
+    application.add_handler(CommandHandler("status", status))
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     print(">>> BOT STARTED")
 
     async def start_tasks(app):
-
-        asyncio.create_task(
-            check_alerts(app)
-        )
-
-        asyncio.create_task(
-            live_timer(app)
-        )
-
-        # remove webhook
-        await app.bot.delete_webhook(
-            drop_pending_updates=True
-        )
+        app.create_task(check_alerts(app))
+        app.create_task(live_timer(app))
+        await app.bot.delete_webhook(drop_pending_updates=True)
 
     application.post_init = start_tasks
 
     application.run_polling()
 
 
-# ===================== START =====================
 if name == "main":
     main()
