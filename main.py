@@ -54,28 +54,35 @@ def now():
 
 
 # ===================== SAFE PARSER =====================
-def is_alert(data) -> bool:
+def is_alert(data):
     try:
+
+        # format 1
+        if isinstance(data, dict) and "states" in data:
+            data = data["states"]
+
+        # format 2
         if isinstance(data, list):
-            return any(
-                x.get("id") == REGION_ID and x.get("alert") is True
-                for x in data
-            )
+            for region in data:
 
-        if isinstance(data, dict):
+                region_id = (
+                    region.get("regionId")
+                    or region.get("id")
+                )
 
-            if "states" in data:
-                return is_alert(data["states"])
+                alert = (
+                    region.get("activeAlerts")
+                    or region.get("alert")
+                    or False
+                )
 
-            if str(REGION_ID) in data:
-                return bool(data[str(REGION_ID)])
-
-            if REGION_ID in data:
-                return bool(data[REGION_ID])
+                if int(region_id) == REGION_ID:
+                    return bool(alert)
 
         return False
 
-    except Exception:
+    except Exception as e:
+        print("[PARSER ERROR]", e)
         return False
 
 
@@ -98,6 +105,8 @@ async def alert_loop(app: Application):
                     data = await r.json()
 
                 active = is_alert(data)
+                print("[DEBUG ACTIVE]", active)
+                print("[DEBUG DATA]", data)
                 status_cache = "ALERT" if active else "CLEAR"
 
                 if last_state is None:
@@ -231,7 +240,13 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
 
     logger.info("STEP 3 — starting polling")
+    async def test(app):
+    await app.bot.send_message(
+        chat_id=CHANNEL_ID,
+        text="✅ TEST MESSAGE"
+    )
 
+app.post_init = test
     app.run_polling(
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
