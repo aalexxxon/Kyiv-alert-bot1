@@ -1,11 +1,4 @@
-# Основна бібліотека для Telegram бота з підтримкою webhook
-python-telegram-bot[webhooks]==20.7
-
-# Flask для health‑роутів та простого веб‑сервера
+python-telegram-bot==20.7
 flask==3.0.3
-
-# Requests для роботи з API alerts.com.ua
 requests==2.31.0
-
-# Pytz для коректної роботи з часовими зонами
 pytz==2024.1
