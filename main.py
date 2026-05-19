@@ -198,7 +198,6 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
 
     print(">>> BOT STARTED")
-    app.run_polling()
 
 
 if __name__ == "__main__":
