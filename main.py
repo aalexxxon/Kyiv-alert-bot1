@@ -5,12 +5,7 @@ from datetime import datetime
 import aiohttp
 import pytz
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
-
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -36,14 +31,16 @@ if not CHANNEL_ID:
 print(">>> BOT_TOKEN:", bool(BOT_TOKEN))
 print(">>> CHANNEL_ID:", CHANNEL_ID)
 
+# Railway gives port automatically
+PORT = int(os.getenv("PORT", "8000"))
+
+# IMPORTANT: твій Railway URL
+WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
+
 # ===================== CONFIG =====================
 
 API_URL = "https://alerts.com.ua/api/states"
-
 REGION_ID = 31
-
-WEBHOOK_URL = "https://kyiv-alert-bot1-production.up.railway.app"
-
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 # ===================== STATE =====================
@@ -51,13 +48,10 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 last_state = None
 alert_start_time = None
 alert_message_id = None
-
 live_timer_running = False
-
 current_status = "CLEAR"
 last_check_time = "never"
 
-# ===================== TIME =====================
 
 def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
@@ -66,107 +60,56 @@ def now():
 # ===================== ALERT LOOP =====================
 
 async def check_alerts(app):
-    global last_state
-    global alert_start_time
-    global alert_message_id
-    global live_timer_running
-    global current_status
-    global last_check_time
+    global last_state, alert_start_time, alert_message_id
+    global live_timer_running, current_status, last_check_time
 
     print("[INFO] Alert loop started")
 
     async with aiohttp.ClientSession() as session:
-
         while True:
-
             try:
                 last_check_time = now()
 
-                async with session.get(API_URL, timeout=10) as response:
-                    data = await response.json()
+                async with session.get(API_URL, timeout=10) as resp:
+                    data = await resp.json()
 
                 states = data.get("states", data)
 
                 active = any(
-                    region.get("id") == REGION_ID
-                    and region.get("alert", False)
-                    for region in states
+                    r.get("id") == REGION_ID and r.get("alert", False)
+                    for r in states
                 )
 
                 current_status = "ALERT" if active else "CLEAR"
 
-                # FIRST START
                 if last_state is None:
                     last_state = active
 
-                # STATE CHANGED
                 elif active != last_state:
 
-                    # ================= ALERT START =================
-
                     if active:
-
                         alert_start_time = datetime.now(KYIV_TZ)
-
                         live_timer_running = True
 
                         msg = await app.bot.send_message(
                             chat_id=CHANNEL_ID,
-                            text=(
-                                "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
-                                f"⏰ {now()}\n"
-                                "⏱️ Триває: 00:00:00"
-                            ),
+                            text="🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏱️ 00:00:00",
                             reply_markup=InlineKeyboardMarkup([
-                                [
-                                    InlineKeyboardButton(
-                                        "📡 Статус",
-                                        callback_data="refresh"
-                                    )
-                                ]
+                                [InlineKeyboardButton("📡 Статус", callback_data="refresh")]
                             ])
                         )
 
                         alert_message_id = msg.message_id
-
                         print("[INFO] ALERT STARTED")
 
-                    # ================= ALERT END =================
-
                     else:
-
                         live_timer_running = False
-
-                        duration_text = "⏱️ Тривалість невідома"
-
-                        if alert_start_time:
-
-                            duration = (
-                                datetime.now(KYIV_TZ)
-                                - alert_start_time
-                            )
-
-                            total = int(duration.total_seconds())
-
-                            h = total // 3600
-                            m = (total % 3600) // 60
-                            s = total % 60
-
-                            duration_text = (
-                                f"⏱️ Тривала: "
-                                f"{h:02}:{m:02}:{s:02}"
-                            )
+                        alert_message_id = None
 
                         await app.bot.send_message(
                             chat_id=CHANNEL_ID,
-                            text=(
-                                "🟢 КИЇВ | ВІДБІЙ ПОВІТРЯНОЇ ТРИВОГИ\n"
-                                f"⏰ {now()}\n"
-                                f"{duration_text}"
-                            )
+                            text="🟢 КИЇВ | ВІДБІЙ ПОВІТРЯНОЇ ТРИВОГИ"
                         )
-
-                        alert_message_id = None
 
                         print("[INFO] ALERT ENDED")
 
@@ -178,31 +121,19 @@ async def check_alerts(app):
             await asyncio.sleep(20)
 
 
-# ===================== LIVE TIMER =====================
+# ===================== TIMER =====================
 
 async def live_timer(app):
-    global alert_message_id
-    global alert_start_time
-    global live_timer_running
+    global alert_message_id, alert_start_time, live_timer_running
 
     print("[INFO] Timer started")
 
     while True:
-
         try:
+            if live_timer_running and alert_message_id and alert_start_time:
 
-            if (
-                live_timer_running
-                and alert_message_id
-                and alert_start_time
-            ):
-
-                duration = (
-                    datetime.now(KYIV_TZ)
-                    - alert_start_time
-                )
-
-                total = int(duration.total_seconds())
+                delta = datetime.now(KYIV_TZ) - alert_start_time
+                total = int(delta.total_seconds())
 
                 h = total // 3600
                 m = (total % 3600) // 60
@@ -211,26 +142,15 @@ async def live_timer(app):
                 text = (
                     "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n"
                     f"⏰ {now()}\n"
-                    f"⏱️ Триває: {h:02}:{m:02}:{s:02}"
+                    f"⏱️ {h:02}:{m:02}:{s:02}"
                 )
-
-                try:
-
+[19.05.2026 15:10] Александр: try:
                     await app.bot.edit_message_text(
                         chat_id=CHANNEL_ID,
                         message_id=alert_message_id,
-                        text=text,
-                        reply_markup=InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton(
-                                    "📡 Статус",
-                                    callback_data="refresh"
-                                )
-                            ]
-                        ])
+                        text=text
                     )
-
-                except Exception:
+                except:
                     pass
 
         except Exception as e:
@@ -239,68 +159,33 @@ async def live_timer(app):
         await asyncio.sleep(10)
 
 
-# ===================== COMMAND =====================
+# ===================== COMMANDS =====================
 
-async def status_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    keyboard = [[
-        InlineKeyboardButton(
-            "🔄 Refresh",
-            callback_data="refresh"
-        ),
-        InlineKeyboardButton(
-            "📡 Ping",
-            callback_data="ping"
-        )
-    ]]
-
-    text = (
-        "🟢 Bot Status: RUNNING\n"
-        f"📡 Alert: {current_status}\n"
-        f"⏰ Last check: {last_check_time}"
-    )
-
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        f"🟢 Bot RUNNING\n📡 {current_status}\n⏰ {last_check_time}"
     )
 
 
-# ===================== BUTTONS =====================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
 
-async def button_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    if query.data == "refresh":
-
-        text = (
-            "🟢 Bot Status: RUNNING\n"
-            f"📡 Alert: {current_status}\n"
-            f"⏰ Last check: {last_check_time}"
+    if q.data == "refresh":
+        await q.edit_message_text(
+            f"📡 Status: {current_status}\n⏰ {last_check_time}"
         )
 
-        await query.edit_message_text(text)
-
-    elif query.data == "ping":
-
-        await query.edit_message_text("📡 Pong!")
+    elif q.data == "ping":
+        await q.edit_message_text("📡 Pong")
 
 
 # ===================== POST INIT =====================
 
 async def post_init(app):
-
     print("[INFO] Starting background tasks")
 
+    # важливо: без конфлікту запуску
     asyncio.create_task(check_alerts(app))
     asyncio.create_task(live_timer(app))
 
@@ -309,16 +194,13 @@ async def post_init(app):
         drop_pending_updates=True
     )
 
-    info = await app.bot.get_webhook_info()
-
-    print("[WEBHOOK INFO]", info)
+    print("[INFO] WEBHOOK SET OK")
 
 
 # ===================== MAIN =====================
 
 def main():
-
-    print("STEP 1: creating app")
+    print("STEP 1")
 
     app = (
         Application.builder()
@@ -327,33 +209,22 @@ def main():
         .build()
     )
 
-    print("STEP 2: adding handlers")
+    print("STEP 2")
 
-    app.add_handler(
-        CommandHandler(
-            "status",
-            status_cmd
-        )
-    )
+    app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    app.add_handler(
-        CallbackQueryHandler(
-            button_handler
-        )
-    )
+    print(">>> START WEBHOOK")
 
-    print(">>> SETTING WEBHOOK...")
-
+    # 🔥 FIX: Railway-safe webhook mode
     app.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000)),
+        port=PORT,
         url_path="webhook",
         webhook_url=f"{WEBHOOK_URL}/webhook",
         drop_pending_updates=True,
     )
 
 
-# ===================== START =====================
-
-if __name__ == "__main__":
+if name == "main":
     main()
