@@ -8,7 +8,7 @@ import logging
 
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContexTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ===================== LOGGING =====================
 logging.basicConfig(level=logging.INFO)
