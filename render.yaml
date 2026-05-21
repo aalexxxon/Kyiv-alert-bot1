@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: kyiv-alert-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: CHANNEL_ID
+        sync: false
+        sync: false
+    autoDeploy: true
+    healthCheckPath: /health
