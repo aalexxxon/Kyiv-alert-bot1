@@ -140,14 +140,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===================== ALERT LOOP =====================
 async def check_alerts(app: Application):
-    global (
-        last_state,
-        alert_start_time,
-        last_check_time,
-        current_status,
-        alert_message_id,
-        live_timer_running,
-    )
+    global last_state, alert_start_time,
+    last_check_time, current_status,
+    alert_message_id, live_timer_running
 
     logger.info(f"[{now()}] ALERT LOOP STARTED")
 
