@@ -1,3 +1,4 @@
-python-telegram-bot==21.6
-aiohttp==3.9.5
+python-telegram-bot[webhook]==20.07
+flask==3.0.3
+requests==2.31.0
 pytz==2024.1
