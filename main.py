@@ -5,7 +5,6 @@ import os
 import pytz
 import logging
 
-from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -15,17 +14,6 @@ logger = logging.getLogger(__name__)
 
 # ===================== TIMEZONE =====================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
-
-# ===================== FLASK =====================
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "Bot is running"
-
-@flask_app.route("/health")
-def health():
-    return "OK", 200
 
 # ===================== ENV =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
