@@ -1,3 +1,2 @@
 python-telegram-bot==21.6
-httpx==21.6
 pytz
