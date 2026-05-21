@@ -221,7 +221,7 @@ def main():
         listen="0.0.0.0",
         port==int(os.environ.get("PORT", 8080)),
         url_path=BOT_TOKEN,
-        webhook_url=f"https://kyiv-alert-bot.onrender.com/{BOT_TOKEN}"
+        webhook_url=f"https://kyiv-alert-bot.onrender.com/{BOT_TOKEN}",
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES,
     )
