@@ -5,8 +5,8 @@ from datetime import datetime
 
 import pytz
 import httpx
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from aiohttp import web
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -40,9 +40,17 @@ def now():
     return datetime.now(KYIV_TZ).strftime("%H:%M:%S")
 
 # ===================== HANDLERS =====================
-async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def status_cmd(update, context):
     text = (f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Останній чек: {last_check_time}")
     await update.message.reply_text(text)
+
+async def button_handler(update, context):
+    query = update.callback_query
+    await query.answer()
+
+# ===================== WEB SERVER (FOR RENDER) =====================
+async def handle_ping(request):
+    return web.Response(text="Bot is running and healthy")
 
 # ===================== ALERT LOOP =====================
 async def alert_loop(app):
@@ -70,13 +78,24 @@ async def alert_loop(app):
             await asyncio.sleep(45)
 
 # ===================== MAIN =====================
-if __name__ == "__main__":
+async def run_bot():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
-    
-    # Запуск
-    loop = asyncio.get_event_loop()
-    loop.create_task(alert_loop(app))
-    
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # Запуск веб-сервера для Render
+    app_http = web.Application()
+    app_http.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app_http)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    await site.start()
+    logger.info("HTTP server started")
+
+    # Запуск бота
+    asyncio.create_task(alert_loop(app))
     logger.info("Бот запущено в режимі Polling")
-    app.run_polling()
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(run_bot())
