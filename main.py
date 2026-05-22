@@ -142,4 +142,7 @@ async def run_bot():
     await app.updater.idle()
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    try:
+        asyncio.run(run_bot())
+    except Exception as e:
+        logger.error(f"CRITICAL ERROR: {e}")
