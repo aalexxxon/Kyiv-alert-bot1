@@ -125,7 +125,7 @@ async def run_bot():
     )
     
     logger.info("Bot started successfully.")
-    await app.updater.idle()
+    await asyncio.Event().wait().
 
 if __name__ == "__main__":
     try:
