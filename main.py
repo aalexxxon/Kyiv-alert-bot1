@@ -89,7 +89,10 @@ async def main():
     app_http.router.add_get('/', handle_ping)
     runner = web.AppRunner(app_http)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    
+    # Використовуємо порт з оточення Render
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
     # 3. Запуск циклу тривог
