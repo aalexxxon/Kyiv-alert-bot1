@@ -47,7 +47,7 @@ async def alert_loop(app):
         await asyncio.sleep(45)
 
 async def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).drop_pending_updates(True).build()
     app.add_handler(CommandHandler("status", status_cmd))
 
     # Запуск web-сервера для Render
