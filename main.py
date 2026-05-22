@@ -8,7 +8,7 @@ import httpx
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application,
+    ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
@@ -21,12 +21,9 @@ logger = logging.getLogger(__name__)
 # ===================== CONFIG =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
-WEBHOOK_URL = "https://kyiv-alert-bot1.onrender.com"
 
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is missing")
-if not CHANNEL_ID:
-    raise RuntimeError("CHANNEL_ID is missing")
+if not BOT_TOKEN or not CHANNEL_ID:
+    raise RuntimeError("BOT_TOKEN or CHANNEL_ID is missing")
 
 # ===================== SETTINGS =====================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -44,35 +41,11 @@ def now():
 
 # ===================== HANDLERS =====================
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[
-        InlineKeyboardButton("🔄 Refresh", callback_data="refresh"),
-        InlineKeyboardButton("📡 Ping", callback_data="ping"),
-    ]]
-    text = (
-        f"🟢 Bot Status: RUNNING\n"
-        f"📍 Region: Kyiv (31)\n"
-        f"📡 Alert: {current_status}\n"
-        f"⏰ Last check: {last_check_time}"
-    )
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global current_status, last_check_time
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "refresh":
-        await query.edit_message_text(
-            f"🟢 Bot Status: RUNNING\n"
-            f"📍 Region: Kyiv (31)\n"
-            f"📡 Alert: {current_status}\n"
-            f"⏰ Last check: {last_check_time}"
-        )
-    elif query.data == "ping":
-        await query.edit_message_text("📡 Pong!")
+    text = (f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Останній чек: {last_check_time}")
+    await update.message.reply_text(text)
 
 # ===================== ALERT LOOP =====================
-async def alert_loop(app: Application):
+async def alert_loop(app):
     global last_state, alert_start_time, current_status, last_check_time
     async with httpx.AsyncClient() as client:
         while True:
@@ -86,52 +59,24 @@ async def alert_loop(app: Application):
                 if last_state is not None and active != last_state:
                     if active:
                         alert_start_time = datetime.now(KYIV_TZ)
-                        await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text=f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}",
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📡 Статус", callback_data="refresh")]])
-                        )
+                        await app.bot.send_message(CHANNEL_ID, f"🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА\n⏰ {now()}")
                     else:
-                        duration_text = ""
-                        if alert_start_time:
-                            delta = datetime.now(KYIV_TZ) - alert_start_time
-                            h, m, s = delta.seconds // 3600, (delta.seconds % 3600) // 60, delta.seconds % 60
-                            duration_text = f"\n⏱️ Тривала: {h:02}:{m:02}:{s:02}"
-                        await app.bot.send_message(
-                            chat_id=CHANNEL_ID,
-                            text=f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ\n⏰ {now()}{duration_text}"
-                        )
+                        delta = datetime.now(KYIV_TZ) - alert_start_time if alert_start_time else None
+                        dur = f"\n⏱️ Тривала: {delta.seconds//3600:02}:{(delta.seconds%3600)//60:02}:{delta.seconds%60:02}" if delta else ""
+                        await app.bot.send_message(CHANNEL_ID, f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ\n⏰ {now()}{dur}")
                 last_state = active
             except Exception as e:
-                logger.error(f"[ALERT LOOP ERROR] {e}")
-            await asyncio.sleep(30)
+                logger.error(f"Loop error: {e}")
+            await asyncio.sleep(45)
 
 # ===================== MAIN =====================
-async def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("status", status_cmd))
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    await app.initialize()
-    await app.start() # Спочатку запускаємо додаток
-    asyncio.create_task(alert_loop(app))
-
-    # Запуск вебхука
-    await app.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
-        drop_pending_updates=True,
-    )
-    
-    logger.info("Bot started successfully.")
-    
-    # Використовуємо app.idle() замість app.updater.idle()
-    await app.idle()
-
 if __name__ == "__main__":
-    try:
-        asyncio.run(run_bot())
-    except Exception as e:
-        logger.error(f"CRITICAL ERROR: {e}")
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("status", status_cmd))
+    
+    # Запуск
+    loop = asyncio.get_event_loop()
+    loop.create_task(alert_loop(app))
+    
+    logger.info("Бот запущено в режимі Polling")
+    app.run_polling()
