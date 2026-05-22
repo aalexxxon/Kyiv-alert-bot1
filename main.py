@@ -16,7 +16,7 @@ from telegram.ext import (
 
 # ===================== LOGGING =====================
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name)
 
 # ===================== CONFIG =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -132,5 +132,5 @@ async def run_bot():
     
     await asyncio.Future()  # Утримуємо бота запущеним
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(run_bot())
