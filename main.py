@@ -132,5 +132,5 @@ async def run_bot():
     
     await asyncio.Future()  # Утримуємо бота запущеним
 
-if name == "main":
+if name == "__main__":
     asyncio.run(run_bot())
