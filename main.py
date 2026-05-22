@@ -104,7 +104,7 @@ async def alert_loop(app: Application):
                 last_state = active
             except Exception as e:
                 logger.error(f"[ALERT LOOP ERROR] {e}")
-            await asyncio.sleep(30) # Збільшено інтервал для стабільності
+            await asyncio.sleep(30)
 
 # ===================== MAIN =====================
 async def run_bot():
@@ -113,9 +113,10 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(button_handler))
 
     await app.initialize()
+    await app.start() # Спочатку запускаємо додаток
     asyncio.create_task(alert_loop(app))
 
-    # Тільки start_webhook, без додаткових викликів API
+    # Запуск вебхука
     await app.updater.start_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
@@ -125,7 +126,9 @@ async def run_bot():
     )
     
     logger.info("Bot started successfully.")
-    await asyncio.Event().wait().
+    
+    # Використовуємо app.idle() замість app.updater.idle()
+    await app.idle()
 
 if __name__ == "__main__":
     try:
