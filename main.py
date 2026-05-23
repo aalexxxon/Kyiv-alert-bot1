@@ -23,7 +23,9 @@ current_status = "🟢 ВІДБІЙ"
 last_check_time = None
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}")
+    await update.message.reply_text(
+        f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}"
+    )
 
 async def alert_loop(app):
     global last_state, current_status, last_check_time
@@ -46,8 +48,8 @@ async def alert_loop(app):
                 full_json = r.json()
                 data = full_json.get("states", [])
                 
-                # Пошук тільки міста Київ
-                kyiv_data = next((x for x in data if x.get("name") == "Київ"), None)
+                # Пошук тільки міста Київ (UID 30)
+                kyiv_data = next((x for x in data if x.get("id") == 30), None)
                 
                 if kyiv_data is None:
                     logger.warning("Місто Київ не знайдено в списку API.")
