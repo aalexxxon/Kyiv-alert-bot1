@@ -31,7 +31,6 @@ async def alert_loop(app):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    first_run = True
     while True:
         try:
             async with httpx.AsyncClient() as client:
@@ -41,19 +40,17 @@ async def alert_loop(app):
                 if r.status_code == 200:
                     data = r.json().get("states", [])
                     
-                    # ДІАГНОСТИКА: виводимо всі назви та ID при першому запуску
-                    if first_run:
-                        logger.info(f"Список усіх доступних об'єктів API: {[{x.get('name'): x.get('id')} for x in data]}")
-                        first_run = False
-                    
-                    # Пошук за назвою "Київ"
-                    kyiv_data = next((x for x in data if x.get("name") == "Київ"), None)
+                    # ВИПРАВЛЕНО: Київ має id: 2
+                    kyiv_data = next((x for x in data if x.get("id") == 2), None)
                     
                     if kyiv_data:
                         active = kyiv_data.get("alert", False)
+                        logger.info(f"Статус Київ (ID 2) отримано: {'ТРИВОГА' if active else 'ВІДБІЙ'}")
                     else:
                         active = False
+                        logger.warning("Об'єкт Київ (ID 2) не знайдено.")
                 else:
+                    logger.error(f"Помилка API: {r.status_code}")
                     active = False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
@@ -75,8 +72,10 @@ async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
 
+    # Видаляємо вебхук перед запуском
     await app.bot.delete_webhook(drop_pending_updates=True)
 
+    # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
     
@@ -89,6 +88,7 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
+    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
