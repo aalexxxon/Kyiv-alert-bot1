@@ -31,33 +31,34 @@ async def alert_loop(app):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
+    first_run = True
     while True:
         try:
             async with httpx.AsyncClient() as client:
                 url = "https://alerts.com.ua/api/states"
                 r = await client.get(url, headers=headers, timeout=10)
                 
-                if r.status_code != 200:
-                    logger.error(f"Помилка API (код {r.status_code})")
-                    await asyncio.sleep(45)
-                    continue
-                
-                data = r.json().get("states", [])
-                
-                # Пошук за ID 30 для міста Київ
-                kyiv_data = next((x for x in data if x.get("id") == 30), None)
-                
-                if kyiv_data is None:
-                    logger.warning("Місто Київ (ID 30) не знайдено.")
-                    active = False
+                if r.status_code == 200:
+                    data = r.json().get("states", [])
+                    
+                    # ДІАГНОСТИКА: виводимо всі назви та ID при першому запуску
+                    if first_run:
+                        logger.info(f"Список усіх доступних об'єктів API: {[{x.get('name'): x.get('id')} for x in data]}")
+                        first_run = False
+                    
+                    # Пошук за назвою "Київ"
+                    kyiv_data = next((x for x in data if x.get("name") == "Київ"), None)
+                    
+                    if kyiv_data:
+                        active = kyiv_data.get("alert", False)
+                    else:
+                        active = False
                 else:
-                    active = kyiv_data.get("alert", False)
-                    logger.info(f"Статус Київ (ID 30): {'ТРИВОГА' if active else 'ВІДБІЙ'}")
+                    active = False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
-            # Логіка сповіщень
             if last_state is not None and active != last_state:
                 if active:
                     await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
