@@ -23,9 +23,7 @@ current_status = "🟢 ВІДБІЙ"
 last_check_time = None
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}"
-    )
+    await update.message.reply_text(f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}")
 
 async def alert_loop(app):
     global last_state, current_status, last_check_time
@@ -44,24 +42,22 @@ async def alert_loop(app):
                     await asyncio.sleep(45)
                     continue
                 
-                # Отримання даних
-                full_json = r.json()
-                data = full_json.get("states", [])
+                data = r.json().get("states", [])
                 
-                # Пошук тільки міста Київ (UID 30)
+                # Пошук за ID 30 для міста Київ
                 kyiv_data = next((x for x in data if x.get("id") == 30), None)
                 
                 if kyiv_data is None:
-                    logger.warning("Місто Київ не знайдено в списку API.")
+                    logger.warning("Місто Київ (ID 30) не знайдено.")
                     active = False
                 else:
                     active = kyiv_data.get("alert", False)
-                    logger.info(f"Поточний статус для м. Київ: {'ТРИВОГА' if active else 'ВІДБІЙ'}")
+                    logger.info(f"Статус Київ (ID 30): {'ТРИВОГА' if active else 'ВІДБІЙ'}")
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
-            # Логіка надсилання повідомлень
+            # Логіка сповіщень
             if last_state is not None and active != last_state:
                 if active:
                     await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
@@ -78,10 +74,8 @@ async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
 
-    # Видаляємо вебхук перед запуском
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
     
@@ -94,7 +88,6 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
-    # Запуск циклу
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
