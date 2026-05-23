@@ -72,6 +72,7 @@ async def main():
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
+    await app.bot.send_message(chat_id=-1003777875292, text="Бот успішно запустився і тестує канал!") 
     
     asyncio.create_task(alert_loop(app))
     
