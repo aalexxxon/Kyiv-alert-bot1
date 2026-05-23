@@ -28,25 +28,29 @@ async def alert_loop(app):
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get("https://alerts.com.ua/api/states", timeout=10)
+                # Додаємо параметр часу для обходу кешу
+                url = f"https://alerts.com.ua/api/states?t={datetime.now().timestamp()}"
+                r = await client.get(url, timeout=10)
                 data = r.json().get("states", [])
                 
+                # Пошук стану для ID 31 (Київ)
                 kyiv_data = next((x for x in data if x.get("id") == 31), None)
-                active = kyiv_data.get("alert", False) if kyiv_data else False
                 
-                logger.info(f"Статус API (Київ): {'ТРИВОГА' if active else 'ВІДБІЙ'}")
+                # Логуємо повні дані по Києву для діагностики
+                logger.info(f"Діагностика API (Київ): {kyiv_data}")
+                
+                active = kyiv_data.get("alert", False) if kyiv_data else False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
-            # Логіка оновлена: реагує на зміну або на поточну тривогу при першому запуску
+            # Логіка повідомлень
             if last_state is not None and active != last_state:
                 if active:
                     await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
                 else:
                     await app.bot.send_message(CHANNEL_ID, "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ")
             elif last_state is None and active:
-                # Якщо бот щойно запустився і тривога вже активна
                 await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | БОТ ЗАПУЩЕНИЙ, У МІСТІ ТРИВОГА!")
             
             last_state = active
