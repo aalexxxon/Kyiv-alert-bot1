@@ -17,7 +17,7 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 # Глобальні змінні
 last_state = None
-current_status = "CLEAR"
+current_status = "🟢 ВІДБІЙ"
 last_check_time = None
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -28,23 +28,26 @@ async def alert_loop(app):
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                # Додаємо параметр часу для обходу кешу
+                # Додаємо таймстемп для уникнення кешування
                 url = f"https://alerts.com.ua/api/states?t={datetime.now().timestamp()}"
                 r = await client.get(url, timeout=10)
                 data = r.json().get("states", [])
                 
-                # Пошук стану для ID 31 (Київ)
-                kyiv_data = next((x for x in data if x.get("id") == 31), None)
+                # Пошук за назвою "Київ"
+                kyiv_data = next((x for x in data if "Київ" in str(x.get("name", ""))), None)
                 
-                # Логуємо повні дані по Києву для діагностики
                 logger.info(f"Діагностика API (Київ): {kyiv_data}")
                 
-                active = kyiv_data.get("alert", False) if kyiv_data else False
+                if kyiv_data:
+                    active = kyiv_data.get("alert", False)
+                else:
+                    active = False
+                    logger.warning("Київ не знайдено в API!")
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
-            # Логіка повідомлень
+            # Логіка сповіщень
             if last_state is not None and active != last_state:
                 if active:
                     await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
@@ -62,6 +65,7 @@ async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
 
+    # Видалення вебхука для уникнення конфліктів
     await app.bot.delete_webhook(drop_pending_updates=True)
 
     async def ping_handler(request):
