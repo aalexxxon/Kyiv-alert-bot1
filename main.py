@@ -46,21 +46,20 @@ async def alert_loop(app):
                 full_json = r.json()
                 data = full_json.get("states", [])
                 
-                # Пошук Києва (шукаємо запис, де назва містить "Київ")
-                kyiv_data = next((x for x in data if "Київ" in x.get("name", "")), None)
+                # Пошук тільки міста Київ
+                kyiv_data = next((x for x in data if x.get("name") == "Київ"), None)
                 
-                # Логування для діагностики
                 if kyiv_data is None:
-                    logger.warning(f"Київ не знайдено. Приклад структури API: {data[:2]}")
+                    logger.warning("Місто Київ не знайдено в списку API.")
+                    active = False
                 else:
-                    logger.info(f"Статус отримано: {kyiv_data}")
-                
-                active = kyiv_data.get("alert", False) if kyiv_data else False
+                    active = kyiv_data.get("alert", False)
+                    logger.info(f"Поточний статус для м. Київ: {'ТРИВОГА' if active else 'ВІДБІЙ'}")
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
-            # Відправка повідомлень у канал
+            # Логіка надсилання повідомлень
             if last_state is not None and active != last_state:
                 if active:
                     await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
@@ -77,10 +76,10 @@ async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
 
-    # Видаляємо вебхук перед запуском polling
+    # Видаляємо вебхук перед запуском
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    # Веб-сервер для підтримки Render (щоб бот не засинав)
+    # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
     
@@ -93,10 +92,9 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
-    # Запускаємо цикл перевірки тривог
+    # Запуск циклу
     asyncio.create_task(alert_loop(app))
     
-    # Тримаємо програму активною
     await asyncio.Future() 
 
 if __name__ == "__main__":
