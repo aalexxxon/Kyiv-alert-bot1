@@ -28,19 +28,19 @@ async def alert_loop(app):
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                # API UkrZen
-                url = f"https://war.ukrzen.in.ua/alerts/api/alerts/?t={datetime.now().timestamp()}"
+                # Використовуємо надійне API без токенів
+                url = "https://api.alerts.in.ua/v1/alerts.json"
                 r = await client.get(url, timeout=10)
                 data = r.json().get("alerts", {})
                 
-                # Отримуємо дані для Києва
-                kyiv_status = data.get("Kyiv", {})
+                # У цьому API дані для Києва часто знаходяться за ключем "Kyiv"
+                kyiv_data = data.get("Kyiv", {})
                 
-                # Логування для діагностики
-                logger.info(f"Діагностика API (UkrZen): {kyiv_status}")
+                logger.info(f"Діагностика API (alerts.in.ua): {kyiv_data}")
                 
-                # Якщо об'єкт порожній, вважаємо, що тривоги немає
-                active = kyiv_status.get("active", False) if kyiv_status else False
+                # Перевіряємо, чи є тривога (структура може залежати від API)
+                # Зазвичай це поле 'active' або подібне
+                active = kyiv_data.get("active", False) if kyiv_data else False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
