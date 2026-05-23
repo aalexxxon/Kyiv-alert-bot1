@@ -25,22 +25,30 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def alert_loop(app):
     global last_state, current_status, last_check_time
+    # Заголовки, щоб сервер API бачив запит як від звичайного браузера
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                # Використовуємо надійне API без токенів
-                url = "https://api.alerts.in.ua/v1/alerts.json"
-                r = await client.get(url, timeout=10)
-                data = r.json().get("alerts", {})
+                url = "https://alerts.com.ua/api/states"
+                r = await client.get(url, headers=headers, timeout=10)
                 
-                # У цьому API дані для Києва часто знаходяться за ключем "Kyiv"
-                kyiv_data = data.get("Kyiv", {})
+                if r.status_code != 200:
+                    logger.error(f"Помилка API (код {r.status_code}): {r.text}")
+                    await asyncio.sleep(45)
+                    continue
                 
-                logger.info(f"Діагностика API (alerts.in.ua): {kyiv_data}")
+                data = r.json().get("states", [])
                 
-                # Перевіряємо, чи є тривога (структура може залежати від API)
-                # Зазвичай це поле 'active' або подібне
-                active = kyiv_data.get("active", False) if kyiv_data else False
+                # Шукаємо об'єкт із назвою "Київ"
+                kyiv_data = next((x for x in data if x.get("name") == "Київ"), None)
+                
+                logger.info(f"Діагностика API: {kyiv_data}")
+                
+                active = kyiv_data.get("alert", False) if kyiv_data else False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
