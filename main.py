@@ -27,7 +27,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот працює!")
         await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
@@ -43,13 +43,13 @@ async def alert_loop(app):
                 
                 if r.status_code == 200:
                     data = r.json().get("states", [])
-                    # Шукаємо Київ (ID 2)
-                    kyiv_data = next((x for x in data if x.get("id") == 2), None)
+                    
+                    # Шукаємо об'єкт, де назва містить "Київ" і не є "область"
+                    kyiv_data = next((x for x in data if "Київ" in x.get("name", "") and "область" not in x.get("name", "")), None)
                     
                     if kyiv_data:
                         active = kyiv_data.get("alert", False)
-                        # ДЕТАЛЬНЕ ЛОГУВАННЯ ДЛЯ ДІАГНОСТИКИ
-                        logger.info(f"DEBUG: Київ дані: {kyiv_data}")
+                        logger.info(f"DEBUG: Знайдено Київ! Дані: {kyiv_data}")
                         
                         current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
                         last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
@@ -60,7 +60,7 @@ async def alert_loop(app):
                         
                         last_state = active
                     else:
-                        logger.error("DEBUG: Об'єкт Київ (ID 2) не знайдено в API!")
+                        logger.error("DEBUG: Не вдалося знайти Київ за назвою!")
                 else:
                     logger.error(f"Помилка API: {r.status_code}")
                     
@@ -70,14 +70,16 @@ async def alert_loop(app):
         await asyncio.sleep(45)
 
 async def main():
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN не встановлено!")
+        return
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("test", test_cmd))
 
-    # Видаляємо вебхук перед запуском
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
     
@@ -90,7 +92,6 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
-    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
