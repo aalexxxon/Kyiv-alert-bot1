@@ -27,40 +27,43 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await context.bot.send_message(CHANNEL_ID, "🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
         await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
     except Exception as e:
-        await update.message.reply_text(f"❌ Помилка: не вдалося відправити повідомлення. {e}")
+        await update.message.reply_text(f"❌ Помилка: {e}")
 
 async def alert_loop(app):
     global last_state, current_status, last_check_time
+    url = "https://alerts.com.ua/api/states"
     
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                url = "https://ubilling.net.ua/aerialalerts/json"
                 r = await client.get(url, timeout=10)
                 
                 if r.status_code == 200:
-                    data = r.json()
-                    # ID 2 відповідає за Київ
-                    kyiv_data = data.get("2", {})
-                    active = kyiv_data.get("alarm", 0) == 1
+                    data = r.json().get("states", [])
+                    # Шукаємо Київ (ID 2)
+                    kyiv_data = next((x for x in data if x.get("id") == 2), None)
                     
-                    logger.info(f"Статус Київ (Ubilling): {'ТРИВОГА' if active else 'ВІДБІЙ'}")
+                    if kyiv_data:
+                        active = kyiv_data.get("alert", False)
+                        # ДЕТАЛЬНЕ ЛОГУВАННЯ ДЛЯ ДІАГНОСТИКИ
+                        logger.info(f"DEBUG: Київ дані: {kyiv_data}")
+                        
+                        current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
+                        last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
+                        
+                        if last_state is not None and active != last_state:
+                            msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
+                            await app.bot.send_message(CHANNEL_ID, msg)
+                        
+                        last_state = active
+                    else:
+                        logger.error("DEBUG: Об'єкт Київ (ID 2) не знайдено в API!")
                 else:
-                    logger.error(f"Помилка API Ubilling: {r.status_code}")
-                    active = last_state if last_state is not None else False
-            
-            last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
-            current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
-            
-            # Відправка в канал тільки при зміні статусу (після першого запуску)
-            if last_state is not None and active != last_state:
-                message = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
-                await app.bot.send_message(CHANNEL_ID, message)
-            
-            last_state = active
+                    logger.error(f"Помилка API: {r.status_code}")
+                    
         except Exception as e:
             logger.error(f"Помилка в alert_loop: {e}")
         
@@ -71,12 +74,13 @@ async def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("test", test_cmd))
 
-    # Очистка черги повідомлень
+    # Видаляємо вебхук перед запуском
     await app.bot.delete_webhook(drop_pending_updates=True)
 
     # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
+    
     runner = web.AppRunner(app_http)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
@@ -86,6 +90,7 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
+    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
