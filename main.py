@@ -20,65 +20,63 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 # Глобальні змінні
 last_state = None
 current_status = "🟢 ВІДБІЙ"
-last_check_time = None
+last_check_time = "Ще не було"
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}")
 
+async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await context.bot.send_message(CHANNEL_ID, "🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
+        await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Помилка: не вдалося відправити повідомлення. {e}")
+
 async def alert_loop(app):
     global last_state, current_status, last_check_time
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
     
     while True:
         try:
             async with httpx.AsyncClient() as client:
-                url = "https://alerts.com.ua/api/states"
-                r = await client.get(url, headers=headers, timeout=10)
+                url = "https://ubilling.net.ua/aerialalerts/json"
+                r = await client.get(url, timeout=10)
                 
                 if r.status_code == 200:
-                    data = r.json().get("states", [])
+                    data = r.json()
+                    # ID 2 відповідає за Київ
+                    kyiv_data = data.get("2", {})
+                    active = kyiv_data.get("alarm", 0) == 1
                     
-                    # ВИПРАВЛЕНО: Київ має id: 2
-                    kyiv_data = next((x for x in data if x.get("id") == 2), None)
-                    
-                    if kyiv_data:
-                        active = kyiv_data.get("alert", False)
-                        logger.info(f"Статус Київ (ID 2) отримано: {'ТРИВОГА' if active else 'ВІДБІЙ'}")
-                    else:
-                        active = False
-                        logger.warning("Об'єкт Київ (ID 2) не знайдено.")
+                    logger.info(f"Статус Київ (Ubilling): {'ТРИВОГА' if active else 'ВІДБІЙ'}")
                 else:
-                    logger.error(f"Помилка API: {r.status_code}")
-                    active = False
+                    logger.error(f"Помилка API Ubilling: {r.status_code}")
+                    active = last_state if last_state is not None else False
             
             last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
             current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
             
+            # Відправка в канал тільки при зміні статусу (після першого запуску)
             if last_state is not None and active != last_state:
-                if active:
-                    await app.bot.send_message(CHANNEL_ID, "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА")
-                else:
-                    await app.bot.send_message(CHANNEL_ID, "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ")
+                message = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
+                await app.bot.send_message(CHANNEL_ID, message)
             
             last_state = active
         except Exception as e:
-            logger.error(f"Помилка в циклі: {e}")
+            logger.error(f"Помилка в alert_loop: {e}")
         
         await asyncio.sleep(45)
 
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("test", test_cmd))
 
-    # Видаляємо вебхук перед запуском
+    # Очистка черги повідомлень
     await app.bot.delete_webhook(drop_pending_updates=True)
 
     # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
-    
     runner = web.AppRunner(app_http)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
@@ -88,7 +86,6 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
-    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
