@@ -21,19 +21,20 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 last_state = None
 current_status = "🟢 ВІДБІЙ"
 last_check_time = "Ще не було"
+alert_start_time = None  # Змінна для фіксації початку тривоги
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}")
 
 async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот працює!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
         await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
 
 async def alert_loop(app):
-    global last_state, current_status, last_check_time
+    global last_state, current_status, last_check_time, alert_start_time
     url = "https://alerts.com.ua/api/states"
     
     while True:
@@ -43,8 +44,7 @@ async def alert_loop(app):
                 
                 if r.status_code == 200:
                     data = r.json().get("states", [])
-                    
-                    # Шукаємо об'єкт, де назва містить "Київ" і не є "область"
+                    # Динамічний пошук Києва
                     kyiv_data = next((x for x in data if "Київ" in x.get("name", "") and "область" not in x.get("name", "")), None)
                     
                     if kyiv_data:
@@ -55,12 +55,27 @@ async def alert_loop(app):
                         last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
                         
                         if last_state is not None and active != last_state:
-                            msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА!" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ!"
+                            if active:
+                                # Тривога почалася
+                                alert_start_time = datetime.now(KYIV_TZ)
+                                msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА"
+                            else:
+                                # Відбій, рахуємо тривалість
+                                duration_str = "невідомо"
+                                if alert_start_time:
+                                    delta = datetime.now(KYIV_TZ) - alert_start_time
+                                    minutes = int(delta.total_seconds() // 60)
+                                    seconds = int(delta.total_seconds() % 60)
+                                    duration_str = f"{minutes} хв {seconds} сек"
+                                
+                                msg = f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ\n⏳ Тривалість: {duration_str}"
+                                alert_start_time = None # Скидаємо час після відбою
+                            
                             await app.bot.send_message(CHANNEL_ID, msg)
                         
                         last_state = active
                     else:
-                        logger.error("DEBUG: Не вдалося знайти Київ за назвою!")
+                        logger.error("DEBUG: Не вдалося знайти Київ!")
                 else:
                     logger.error(f"Помилка API: {r.status_code}")
                     
@@ -78,23 +93,21 @@ async def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("test", test_cmd))
 
+    # Видаляємо вебхук, щоб працював polling
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    app_http = web.Application()
-    app_http.router.add_get('/', lambda r: web.Response(text="I am alive!"))
-    
-    runner = web.AppRunner(app_http)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
-    await site.start()
-
+    # Запуск бота
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     
+    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.critical(f"Критична помилка: {e}")
