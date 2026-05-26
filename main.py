@@ -21,14 +21,18 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 last_state = None
 current_status = "🟢 ВІДБІЙ"
 last_check_time = "Ще не було"
-alert_start_time = None  # Змінна для фіксації початку тривоги
+alert_start_time = None 
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"🟢 Бот активний\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}")
+    # Додано parse_mode='HTML' та жирний шрифт
+    await update.message.reply_text(
+        f"🟢 <b>Бот активний</b>\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}",
+        parse_mode='HTML'
+    )
 
 async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот працює!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 <b>Перевірка зв'язку:</b> Бот працює!", parse_mode='HTML')
         await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
@@ -44,7 +48,6 @@ async def alert_loop(app):
                 
                 if r.status_code == 200:
                     data = r.json().get("states", [])
-                    # Пошук Києва
                     kyiv_data = next((x for x in data if "Київ" in x.get("name", "") and "область" not in x.get("name", "")), None)
                     
                     if kyiv_data:
@@ -54,11 +57,10 @@ async def alert_loop(app):
                         
                         if last_state is not None and active != last_state:
                             if active:
-                                # Початок тривоги
                                 alert_start_time = datetime.now(KYIV_TZ)
-                                msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА!"
+                                # Використовуємо <b> для жирного
+                                msg = "🚨 <b>КИЇВ | ПОВІТРЯНА ТРИВОГА!</b>"
                             else:
-                                # Відбій + розрахунок часу
                                 duration_str = "невідомо"
                                 if alert_start_time:
                                     delta = datetime.now(KYIV_TZ) - alert_start_time
@@ -66,10 +68,12 @@ async def alert_loop(app):
                                     seconds = int(delta.total_seconds() % 60)
                                     duration_str = f"{minutes} хв {seconds} сек"
                                 
-                                msg = f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ!\n⏳ Тривалість: {duration_str}"
+                                # Використовуємо <b> для жирного
+                                msg = f"🟢 <b>КИЇВ | ВІДБІЙ ТРИВОГИ!</b>\n⏳ Тривалість: {duration_str}"
                                 alert_start_time = None
                             
-                            await app.bot.send_message(CHANNEL_ID, msg)
+                            # Відправка з HTML розміткою
+                            await app.bot.send_message(CHANNEL_ID, msg, parse_mode='HTML')
                         
                         last_state = active
                 else:
@@ -89,16 +93,13 @@ async def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("test", test_cmd))
 
-    # Видаляємо вебхук для роботи через polling
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    # Веб-сервер для Render (щоб не було Timeout при деплої)
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
     
     runner = web.AppRunner(app_http)
     await runner.setup()
-    # Використовуємо порт з оточення Render
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
