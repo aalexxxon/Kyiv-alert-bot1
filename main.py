@@ -58,7 +58,7 @@ async def alert_loop(app):
                             if active:
                                 # Тривога почалася
                                 alert_start_time = datetime.now(KYIV_TZ)
-                                msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА"
+                                msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА!"
                             else:
                                 # Відбій, рахуємо тривалість
                                 duration_str = "невідомо"
@@ -68,7 +68,7 @@ async def alert_loop(app):
                                     seconds = int(delta.total_seconds() % 60)
                                     duration_str = f"{minutes} хв {seconds} сек"
                                 
-                                msg = f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ\n⏳ Тривалість: {duration_str}"
+                                msg = f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ!\n⏳ Тривалість: {duration_str}"
                                 alert_start_time = None # Скидаємо час після відбою
                             
                             await app.bot.send_message(CHANNEL_ID, msg)
