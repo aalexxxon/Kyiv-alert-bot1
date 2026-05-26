@@ -28,7 +28,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот успішно підключений до каналу!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text="🔔 Перевірка зв'язку: Бот працює!")
         await update.message.reply_text("✅ Повідомлення успішно відправлено в канал!")
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
@@ -44,23 +44,21 @@ async def alert_loop(app):
                 
                 if r.status_code == 200:
                     data = r.json().get("states", [])
-                    # Динамічний пошук Києва
+                    # Пошук Києва
                     kyiv_data = next((x for x in data if "Київ" in x.get("name", "") and "область" not in x.get("name", "")), None)
                     
                     if kyiv_data:
                         active = kyiv_data.get("alert", False)
-                        logger.info(f"DEBUG: Знайдено Київ! Дані: {kyiv_data}")
-                        
                         current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
                         last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
                         
                         if last_state is not None and active != last_state:
                             if active:
-                                # Тривога почалася
+                                # Початок тривоги
                                 alert_start_time = datetime.now(KYIV_TZ)
                                 msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА!"
                             else:
-                                # Відбій, рахуємо тривалість
+                                # Відбій + розрахунок часу
                                 duration_str = "невідомо"
                                 if alert_start_time:
                                     delta = datetime.now(KYIV_TZ) - alert_start_time
@@ -69,13 +67,11 @@ async def alert_loop(app):
                                     duration_str = f"{minutes} хв {seconds} сек"
                                 
                                 msg = f"🟢 КИЇВ | ВІДБІЙ ТРИВОГИ!\n⏳ Тривалість: {duration_str}"
-                                alert_start_time = None # Скидаємо час після відбою
+                                alert_start_time = None
                             
                             await app.bot.send_message(CHANNEL_ID, msg)
                         
                         last_state = active
-                    else:
-                        logger.error("DEBUG: Не вдалося знайти Київ!")
                 else:
                     logger.error(f"Помилка API: {r.status_code}")
                     
@@ -93,21 +89,27 @@ async def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("test", test_cmd))
 
-    # Видаляємо вебхук, щоб працював polling
+    # Видаляємо вебхук для роботи через polling
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    # Запуск бота
+    # Веб-сервер для Render (щоб не було Timeout при деплої)
+    app_http = web.Application()
+    app_http.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
+    
+    runner = web.AppRunner(app_http)
+    await runner.setup()
+    # Використовуємо порт з оточення Render
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     
-    # Запуск циклу перевірки
     asyncio.create_task(alert_loop(app))
     
     await asyncio.Future() 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.critical(f"Критична помилка: {e}")
+    asyncio.run(main())
