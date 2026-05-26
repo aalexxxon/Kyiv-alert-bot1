@@ -55,7 +55,7 @@ async def alert_loop(app):
                         last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
                         
                         if last_state is not None and active != last_state:
-                            msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ"
+                            msg = "🚨 КИЇВ | ПОВІТРЯНА ТРИВОГА!" if active else "🟢 КИЇВ | ВІДБІЙ ТРИВОГИ!"
                             await app.bot.send_message(CHANNEL_ID, msg)
                         
                         last_state = active
