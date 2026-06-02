@@ -24,7 +24,6 @@ last_check_time = "Ще не було"
 alert_start_time = None 
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Додано parse_mode='HTML' та жирний шрифт
     await update.message.reply_text(
         f"🟢 <b>Бот активний</b>\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}",
         parse_mode='HTML'
@@ -58,21 +57,27 @@ async def alert_loop(app):
                         if last_state is not None and active != last_state:
                             if active:
                                 alert_start_time = datetime.now(KYIV_TZ)
-                                # Використовуємо <b> для жирного
                                 msg = "🚨 <b>КИЇВ | ПОВІТРЯНА ТРИВОГА!</b>"
                             else:
                                 duration_str = "невідомо"
                                 if alert_start_time:
                                     delta = datetime.now(KYIV_TZ) - alert_start_time
-                                    minutes = int(delta.total_seconds() // 60)
-                                    seconds = int(delta.total_seconds() % 60)
-                                    duration_str = f"{minutes} хв {seconds} сек"
+                                    total_seconds = int(delta.total_seconds())
+                                    
+                                    hours = total_seconds // 3600
+                                    minutes = (total_seconds % 3600) // 60
+                                    seconds = total_seconds % 60
+                                    
+                                    parts = []
+                                    if hours > 0: parts.append(f"{hours} год.")
+                                    if minutes > 0 or hours > 0: parts.append(f"{minutes} хв.")
+                                    parts.append(f"{seconds} сек.")
+                                    
+                                    duration_str = " ".join(parts)
                                 
-                                # Використовуємо <b> для жирного
                                 msg = f"🟢 <b>КИЇВ | ВІДБІЙ ТРИВОГИ!</b>\n⏳ Тривалість: {duration_str}"
                                 alert_start_time = None
                             
-                            # Відправка з HTML розміткою
                             await app.bot.send_message(CHANNEL_ID, msg, parse_mode='HTML')
                         
                         last_state = active
@@ -95,6 +100,7 @@ async def main():
 
     await app.bot.delete_webhook(drop_pending_updates=True)
 
+    # Веб-сервер для Render
     app_http = web.Application()
     app_http.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
     
