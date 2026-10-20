@@ -23,6 +23,21 @@ current_status = "🟢 ВІДБІЙ"
 last_check_time = "Ще не було"
 alert_start_time = None 
 
+# --- Функції для різних рівнів ---
+def drone_alert():
+    return "🟡 <b>ТРИВОГА | ЗАГРОЗА БПЛА!</b>\nЖовтий рівень!"
+
+def missile_alert():
+    return "🔴 <b>ТРИВОГА | РАКЕТНА ЗАГРОЗА!</b>\nЧервоний рівень!"
+
+def general_alert():
+    return "🚨 <b>КИЇВ | ПОВІТРЯНА ТРИВОГА!</b>"
+
+def all_clear(duration_str):
+    return f"🟢 <b>КИЇВ | ВІДБІЙ ТРИВОГИ!</b>\n⏳ Тривалість: {duration_str}"
+
+
+# --- Команди ---
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🟢 <b>Бот активний</b>\n📡 Статус: {current_status}\n⏰ Ост. перевірка: {last_check_time}",
@@ -36,6 +51,8 @@ async def test_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
 
+
+# --- Основний цикл ---
 async def alert_loop(app):
     global last_state, current_status, last_check_time, alert_start_time
     url = "https://alerts.com.ua/api/states"
@@ -51,31 +68,40 @@ async def alert_loop(app):
                     
                     if kyiv_data:
                         active = kyiv_data.get("alert", False)
-                        current_status = "🚨 ТРИВОГА" if active else "🟢 ВІДБІЙ"
+                        threat_type = kyiv_data.get("type", "")
+                        
+                        # Визначаємо статус
+                        if active:
+                            if threat_type == "drone":
+                                current_status = "🟡 ЖОВТИЙ | Загроза БПЛА"
+                            elif threat_type == "missile":
+                                current_status = "🔴 ЧЕРВОНИЙ | Ракетна загроза"
+                            else:
+                                current_status = "🚨 ТРИВОГА"
+                        else:
+                            current_status = "🟢 ВІДБІЙ"
+                        
                         last_check_time = datetime.now(KYIV_TZ).strftime("%H:%M:%S")
                         
+                        # Якщо стан змінився
                         if last_state is not None and active != last_state:
                             if active:
                                 alert_start_time = datetime.now(KYIV_TZ)
-                                msg = "🚨 <b>КИЇВ | ПОВІТРЯНА ТРИВОГА!</b>"
+                                if threat_type == "drone":
+                                    msg = drone_alert()
+                                elif threat_type == "missile":
+                                    msg = missile_alert()
+                                else:
+                                    msg = general_alert()
                             else:
                                 duration_str = "невідомо"
                                 if alert_start_time:
                                     delta = datetime.now(KYIV_TZ) - alert_start_time
                                     total_seconds = int(delta.total_seconds())
-                                    
-                                    hours = total_seconds // 3600
-                                    minutes = (total_seconds % 3600) // 60
-                                    seconds = total_seconds % 60
-                                    
-                                    parts = []
-                                    if hours > 0: parts.append(f"{hours} год.")
-                                    if minutes > 0 or hours > 0: parts.append(f"{minutes} хв.")
-                                    parts.append(f"{seconds} сек.")
-                                    
-                                    duration_str = " ".join(parts)
+                                    h, m, s = total_seconds // 3600, (total_seconds % 3600) // 60, total_seconds % 60
+                                    duration_str = f"{h:02}:{m:02}:{s:02}"
                                 
-                                msg = f"🟢 <b>КИЇВ | ВІДБІЙ ТРИВОГИ!</b>\n⏳ Тривалість: {duration_str}"
+                                msg = all_clear(duration_str)
                                 alert_start_time = None
                             
                             await app.bot.send_message(CHANNEL_ID, msg, parse_mode='HTML')
@@ -89,6 +115,8 @@ async def alert_loop(app):
         
         await asyncio.sleep(45)
 
+
+# --- Запуск ---
 async def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN не встановлено!")
