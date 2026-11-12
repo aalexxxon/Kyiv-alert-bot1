@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # Налаштування логів
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)
 
 # Конфігурація
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -96,5 +96,5 @@ async def main():
     
     await asyncio.Future() 
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
